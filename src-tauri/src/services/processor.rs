@@ -117,12 +117,19 @@ fn apply_extracted(invoice: &mut Invoice, data: ExtractedInvoiceData, raw_json: 
     invoice.due_date = normalize_date(data.due_date);
     invoice.counterparty_name = data.counterparty_name;
     if let Some(total) = data.total_amount {
-        invoice.total_amount = format_decimal(total);
+        let normalized = if invoice.category == "payable" { total.abs() } else { total };
+        invoice.total_amount = format_decimal(normalized);
     }
     if let Some(currency) = data.currency {
         invoice.currency = currency;
     }
-    invoice.tax_amount = data.tax_amount.map(format_decimal);
-    invoice.net_amount = data.net_amount.map(format_decimal);
+    invoice.tax_amount = data
+        .tax_amount
+        .map(|value| if invoice.category == "payable" { value.abs() } else { value })
+        .map(format_decimal);
+    invoice.net_amount = data
+        .net_amount
+        .map(|value| if invoice.category == "payable" { value.abs() } else { value })
+        .map(format_decimal);
     invoice.confidence_score = data.confidence_score.unwrap_or(0.5);
 }

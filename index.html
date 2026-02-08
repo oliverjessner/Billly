@@ -30,8 +30,10 @@
         <section id="view-dashboard" class="view active">
           <div class="toolbar">
             <div class="toolbar-group">
+              <label for="year-select">Year</label>
+              <select id="year-select"></select>
               <label for="month-select">Month</label>
-              <input id="month-select" type="month" />
+              <select id="month-select"></select>
             </div>
             <button class="primary" id="refresh-dashboard">Refresh</button>
           </div>
@@ -59,8 +61,30 @@
               <ul class="list" id="recent-payables"></ul>
             </div>
             <div class="panel">
-              <h3>Open Payables</h3>
-              <div class="open-payables" id="open-payables"></div>
+              <h3 id="payables-panel-title">Payables</h3>
+              <div class="panel-metrics">
+                <div class="panel-metric">
+                  <span class="metric-label" id="open-payables-label">Open Payables</span>
+                  <span class="metric-value open-payables" id="open-payables"></span>
+                </div>
+                <div class="panel-metric">
+                  <span class="metric-label" id="paid-payables-label">Paid Payables</span>
+                  <span class="metric-value paid-payables" id="paid-payables-month"></span>
+                </div>
+              </div>
+            </div>
+            <div class="panel">
+              <h3 id="revenue-panel-title">Revenue</h3>
+              <div class="panel-metrics">
+                <div class="panel-metric">
+                  <span class="metric-label" id="open-revenue-label">Open Revenue</span>
+                  <span class="metric-value open-revenue" id="open-revenue"></span>
+                </div>
+                <div class="panel-metric">
+                  <span class="metric-label" id="paid-revenue-label">Paid Revenue</span>
+                  <span class="metric-value paid-revenue" id="paid-revenue-month"></span>
+                </div>
+              </div>
             </div>
           </div>
         </section>
@@ -71,24 +95,28 @@
               <button class="segment active" data-category="revenue">Revenue</button>
               <button class="segment" data-category="payable">Payables</button>
             </div>
-            <button class="primary" id="reprocess-visible">Reprocess</button>
+            <div class="toolbar-group">
+              <label for="invoice-year">Year</label>
+              <select id="invoice-year"></select>
+            </div>
           </div>
 
           <div class="invoices-layout">
-            <div class="panel">
-              <table class="table">
-                <thead>
-                  <tr>
-                    <th>Date</th>
-                    <th>Company</th>
-                    <th>Amount</th>
-                    <th>Status</th>
-                    <th>Source</th>
-                    <th>Confidence</th>
-                  </tr>
-                </thead>
-                <tbody id="invoice-list"></tbody>
-              </table>
+            <div class="panel list-panel">
+              <div class="table-scroll">
+                <table class="table">
+                  <thead>
+                    <tr>
+                      <th>Date</th>
+                      <th>Company</th>
+                      <th>Amount</th>
+                      <th>Status</th>
+                      <th>Source</th>
+                    </tr>
+                  </thead>
+                  <tbody id="invoice-list"></tbody>
+                </table>
+              </div>
             </div>
 
             <div class="panel detail" id="invoice-detail">
@@ -110,30 +138,41 @@
           <div class="panel settings">
             <h3>Settings</h3>
             <div class="form-grid">
-              <div class="field">
-                <label>Revenue Folder</label>
-                <div class="field-row">
-                  <input id="revenue-folder" type="text" placeholder="/path/to/revenue" />
-                  <button class="ghost" id="pick-revenue-folder">Select</button>
+              <div class="form-row">
+                <div class="field">
+                  <label>Revenue Folder</label>
+                  <div class="field-row">
+                    <input id="revenue-folder" type="text" placeholder="/path/to/revenue" />
+                    <button class="ghost" id="pick-revenue-folder">Select</button>
+                  </div>
+                </div>
+                <div class="field">
+                  <label>Payables Folder</label>
+                  <div class="field-row">
+                    <input id="payable-folder" type="text" placeholder="/path/to/payables" />
+                    <button class="ghost" id="pick-payable-folder">Select</button>
+                  </div>
+                </div>
+                <div class="field">
+                  <label>OCR Language</label>
+                  <select id="ocr-language">
+                    <option value="deu">German</option>
+                    <option value="eng">English</option>
+                  </select>
                 </div>
               </div>
-              <div class="field">
-                <label>Payables Folder</label>
-                <div class="field-row">
-                  <input id="payable-folder" type="text" placeholder="/path/to/payables" />
-                  <button class="ghost" id="pick-payable-folder">Select</button>
+              <div class="form-row">
+                <div class="field">
+                  <label>OpenAI API Key</label>
+                  <input id="openai-key" type="password" placeholder="sk-..." />
                 </div>
-              </div>
-              <div class="field">
-                <label>OpenAI API Key</label>
-                <input id="openai-key" type="password" placeholder="sk-..." />
-              </div>
-              <div class="field">
-                <label>OCR Language</label>
-                <select id="ocr-language">
-                  <option value="deu">German</option>
-                  <option value="eng">English</option>
-                </select>
+                <div class="field">
+                  <label>Saved API Key</label>
+                  <div class="field-row">
+                    <div id="openai-key-saved" class="token-pill"></div>
+                    <button class="ghost" id="remove-openai-key">Remove</button>
+                  </div>
+                </div>
               </div>
             </div>
             <div class="actions">
@@ -146,6 +185,7 @@
       </main>
     </div>
 
+    <script src="/public/vendor/chart.umd.js"></script>
     <script type="module" src="/src/main.js"></script>
   </body>
 </html>

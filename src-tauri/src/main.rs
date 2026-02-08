@@ -29,16 +29,78 @@ fn main() {
             state.restart_watchers(app.handle())?;
             state.enqueue_scan(app.handle())?;
             app.manage(state);
+
+            #[cfg(target_os = "macos")]
+            {
+                use tauri::menu::{MenuBuilder, MenuItemBuilder, PredefinedMenuItem, SubmenuBuilder};
+                use tauri::{WebviewUrl, WebviewWindowBuilder};
+
+                let handle = app.handle();
+                let about_item = MenuItemBuilder::with_id("about", "About Billly").build(app)?;
+
+                let app_menu = SubmenuBuilder::new(handle, "Billly")
+                    .item(&about_item)
+                    .separator()
+                    .item(&PredefinedMenuItem::services(handle, None)?)
+                    .separator()
+                    .item(&PredefinedMenuItem::hide(handle, None)?)
+                    .item(&PredefinedMenuItem::hide_others(handle, None)?)
+                    .item(&PredefinedMenuItem::show_all(handle, None)?)
+                    .separator()
+                    .item(&PredefinedMenuItem::quit(handle, None)?)
+                    .build()?;
+
+                let edit_menu = SubmenuBuilder::new(handle, "Edit")
+                    .item(&PredefinedMenuItem::undo(handle, None)?)
+                    .item(&PredefinedMenuItem::redo(handle, None)?)
+                    .separator()
+                    .item(&PredefinedMenuItem::cut(handle, None)?)
+                    .item(&PredefinedMenuItem::copy(handle, None)?)
+                    .item(&PredefinedMenuItem::paste(handle, None)?)
+                    .item(&PredefinedMenuItem::select_all(handle, None)?)
+                    .build()?;
+
+                let menu = MenuBuilder::new(handle)
+                    .item(&app_menu)
+                    .item(&edit_menu)
+                    .build()?;
+                app.set_menu(menu)?;
+
+                app.on_menu_event(|app, event| {
+                    if event.id() == "about" {
+                        if let Some(window) = app.get_webview_window("about") {
+                            let _ = window.show();
+                            let _ = window.set_focus();
+                            return;
+                        }
+                        let _ = WebviewWindowBuilder::new(
+                            app,
+                            "about",
+                            WebviewUrl::App("about.html".into()),
+                        )
+                        .title("About Billly")
+                        .inner_size(420.0, 240.0)
+                        .resizable(false)
+                        .maximizable(false)
+                        .minimizable(false)
+                        .center()
+                        .build();
+                    }
+                });
+            }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             commands::settings::get_settings,
             commands::settings::save_settings,
             commands::settings::test_openai_key,
+            commands::settings::test_openai_key_saved,
             commands::settings::reprocess_all,
             commands::settings::pick_folder,
+            commands::settings::remove_openai_key,
             commands::dashboard::get_dashboard_stats,
             commands::invoices::get_invoices,
+            commands::invoices::get_invoice_years,
             commands::invoices::get_invoice_detail,
             commands::invoices::update_invoice_field,
             commands::invoices::clear_overrides,

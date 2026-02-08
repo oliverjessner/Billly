@@ -20,13 +20,24 @@ pub async fn get_dashboard_stats(
     let payable_month = db
         .get_monthly_sum("payable", &current_year_month)
         .map_err(|e| e.to_string())?;
+    let paid_payables_month = db
+        .get_paid_payables_month_total(&current_year_month)
+        .map_err(|e| e.to_string())?;
     let revenue_year = db
         .get_yearly_sum("revenue", current_year)
         .map_err(|e| e.to_string())?;
     let payable_year = db
         .get_yearly_sum("payable", current_year)
         .map_err(|e| e.to_string())?;
-    let open_payables = db.get_open_payables_total().map_err(|e| e.to_string())?;
+    let open_payables = db
+        .get_open_payables_month_total(&current_year_month)
+        .map_err(|e| e.to_string())?;
+    let open_revenue = db
+        .get_status_total_for_month("revenue", "open", &current_year_month)
+        .map_err(|e| e.to_string())?;
+    let paid_revenue_month = db
+        .get_status_total_for_month("revenue", "paid", &current_year_month)
+        .map_err(|e| e.to_string())?;
 
     let recent_revenue = db
         .get_recent_invoices("revenue", 5)
@@ -42,9 +53,12 @@ pub async fn get_dashboard_stats(
         revenue_year,
         payable_month,
         payable_year,
+        paid_payables_month,
         profit_month: revenue_month - payable_month,
         profit_year: revenue_year - payable_year,
         open_payables,
+        open_revenue,
+        paid_revenue_month,
         recent_revenue,
         recent_payables,
         chart_months,

@@ -4,6 +4,8 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 use std::time::Duration;
 
+use crate::utils::within_allowed_depth;
+
 #[derive(Debug, Clone)]
 pub enum FileEventKind {
     Created,
@@ -44,10 +46,11 @@ impl WatcherService {
 }
 
 fn create_watcher(
-    path: PathBuf,
+    base_path: PathBuf,
     category: String,
     tx: mpsc::Sender<FileEvent>,
 ) -> notify::Result<RecommendedWatcher> {
+    let base_for_filter = base_path.clone();
     let mut watcher = recommended_watcher(move |res: notify::Result<Event>| {
         if let Ok(event) = res {
             let kind = match event.kind {
@@ -57,7 +60,7 @@ fn create_watcher(
                 _ => return,
             };
             for path in event.paths {
-                if is_pdf(&path) {
+                if is_pdf(&path) && within_allowed_depth(&base_for_filter, &path) {
                     let _ = tx.send(FileEvent {
                         path: path.to_path_buf(),
                         category: category.clone(),
@@ -68,7 +71,7 @@ fn create_watcher(
         }
     })?;
 
-    watcher.watch(&path, RecursiveMode::NonRecursive)?;
+    watcher.watch(&base_path, RecursiveMode::Recursive)?;
     Ok(watcher)
 }
 

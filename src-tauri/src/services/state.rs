@@ -8,6 +8,7 @@ use crate::db::Database;
 use crate::models::Settings;
 use crate::services::processor::{mark_failed, process_invoice};
 use crate::services::watcher::{debounce_file_event, FileEvent, FileEventKind, WatcherService};
+use crate::utils::MAX_SCAN_DEPTH;
 
 pub struct AppState {
     pub db: Arc<Mutex<Database>>,
@@ -71,7 +72,7 @@ impl AppState {
 
     pub fn scan_folder(&self, folder: PathBuf, category: &str, app: &AppHandle) -> Result<()> {
         let entries = walkdir::WalkDir::new(folder)
-            .max_depth(1)
+            .max_depth(MAX_SCAN_DEPTH)
             .into_iter()
             .filter_map(|e| e.ok())
             .filter(|e| e.path().is_file())

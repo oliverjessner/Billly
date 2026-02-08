@@ -46,6 +46,13 @@ impl Database {
                     "/../migrations/003_create_processing_logs_table.sql"
                 )),
             ),
+            (
+                "004_normalize_payables.sql",
+                include_str!(concat!(
+                    env!("CARGO_MANIFEST_DIR"),
+                    "/../migrations/004_normalize_payables.sql"
+                )),
+            ),
         ];
 
         for (name, sql) in migrations {
@@ -221,15 +228,18 @@ impl Database {
         rows.collect()
     }
 
-    pub fn get_invoice_summaries(&self, category: &str) -> SqlResult<Vec<InvoiceSummary>> {
+    pub fn get_invoice_summaries(&self, category: &str, year: Option<&str>) -> SqlResult<Vec<InvoiceSummary>> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, invoice_date, counterparty_name, total_amount, status, confidence_score, file_path
+            "SELECT invoices.id, invoice_date, counterparty_name, total_amount, status, confidence_score, file_path
              FROM invoices
-             WHERE category = ?1
-             ORDER BY invoice_date DESC",
+             LEFT JOIN invoice_overrides date_override
+               ON date_override.invoice_id = invoices.id AND date_override.field_name = 'invoice_date'
+             WHERE invoices.category = ?1
+               AND (?2 IS NULL OR substr(COALESCE(date_override.override_value, invoices.invoice_date), 1, 4) = ?2)
+             ORDER BY COALESCE(date_override.override_value, invoices.invoice_date) DESC",
         )?;
 
-        let rows = stmt.query_map(params![category], |row| {
+        let rows = stmt.query_map(params![category, year], |row| {
             Ok(InvoiceSummary {
                 id: row.get(0)?,
                 invoice_date: row.get(1)?,
@@ -241,6 +251,22 @@ impl Database {
             })
         })?;
 
+        rows.collect()
+    }
+
+    pub fn get_invoice_years(&self, category: &str) -> SqlResult<Vec<String>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT DISTINCT substr(COALESCE(date_override.override_value, invoices.invoice_date), 1, 4) AS year
+             FROM invoices
+             LEFT JOIN invoice_overrides date_override
+               ON date_override.invoice_id = invoices.id AND date_override.field_name = 'invoice_date'
+             WHERE invoices.category = ?1
+               AND COALESCE(date_override.override_value, invoices.invoice_date) IS NOT NULL
+               AND substr(COALESCE(date_override.override_value, invoices.invoice_date), 1, 4) != ''
+             ORDER BY year DESC",
+        )?;
+
+        let rows = stmt.query_map(params![category], |row| row.get(0))?;
         rows.collect()
     }
 
@@ -313,11 +339,21 @@ impl Database {
         stmt.query_row(params![key], |row| row.get(0)).optional()
     }
 
+    pub fn delete_setting(&self, key: &str) -> SqlResult<()> {
+        self.conn.execute("DELETE FROM settings WHERE key = ?1", params![key])?;
+        Ok(())
+    }
+
     pub fn get_monthly_sum(&self, category: &str, year_month: &str) -> SqlResult<f64> {
         let mut stmt = self.conn.prepare(
-            "SELECT SUM(CAST(total_amount AS REAL))
+            "SELECT SUM(CAST(COALESCE(amt.override_value, invoices.total_amount) AS REAL))
              FROM invoices
-             WHERE category = ?1 AND substr(invoice_date, 1, 7) = ?2",
+             LEFT JOIN invoice_overrides amt
+               ON amt.invoice_id = invoices.id AND amt.field_name = 'total_amount'
+             LEFT JOIN invoice_overrides date_override
+               ON date_override.invoice_id = invoices.id AND date_override.field_name = 'invoice_date'
+             WHERE invoices.category = ?1
+               AND substr(COALESCE(date_override.override_value, invoices.invoice_date), 1, 7) = ?2",
         )?;
 
         let total: Option<f64> = stmt.query_row(params![category, year_month], |row| row.get(0))?;
@@ -326,23 +362,74 @@ impl Database {
 
     pub fn get_yearly_sum(&self, category: &str, year: &str) -> SqlResult<f64> {
         let mut stmt = self.conn.prepare(
-            "SELECT SUM(CAST(total_amount AS REAL))
+            "SELECT SUM(CAST(COALESCE(amt.override_value, invoices.total_amount) AS REAL))
              FROM invoices
-             WHERE category = ?1 AND substr(invoice_date, 1, 4) = ?2",
+             LEFT JOIN invoice_overrides amt
+               ON amt.invoice_id = invoices.id AND amt.field_name = 'total_amount'
+             LEFT JOIN invoice_overrides date_override
+               ON date_override.invoice_id = invoices.id AND date_override.field_name = 'invoice_date'
+             WHERE invoices.category = ?1
+               AND substr(COALESCE(date_override.override_value, invoices.invoice_date), 1, 4) = ?2",
         )?;
 
         let total: Option<f64> = stmt.query_row(params![category, year], |row| row.get(0))?;
         Ok(total.unwrap_or(0.0))
     }
 
-    pub fn get_open_payables_total(&self) -> SqlResult<f64> {
+    pub fn get_paid_payables_month_total(&self, year_month: &str) -> SqlResult<f64> {
         let mut stmt = self.conn.prepare(
-            "SELECT SUM(CAST(total_amount AS REAL))
+            "SELECT SUM(CAST(COALESCE(amt.override_value, invoices.total_amount) AS REAL))
              FROM invoices
-             WHERE category = 'payable' AND status = 'open'",
+             LEFT JOIN invoice_overrides status
+               ON status.invoice_id = invoices.id AND status.field_name = 'status'
+             LEFT JOIN invoice_overrides amt
+               ON amt.invoice_id = invoices.id AND amt.field_name = 'total_amount'
+             LEFT JOIN invoice_overrides date_override
+               ON date_override.invoice_id = invoices.id AND date_override.field_name = 'invoice_date'
+             WHERE invoices.category = 'payable'
+               AND COALESCE(status.override_value, invoices.status) = 'paid'
+               AND substr(COALESCE(date_override.override_value, invoices.invoice_date), 1, 7) = ?1",
         )?;
 
-        let total: Option<f64> = stmt.query_row([], |row| row.get(0))?;
+        let total: Option<f64> = stmt.query_row(params![year_month], |row| row.get(0))?;
+        Ok(total.unwrap_or(0.0))
+    }
+
+    pub fn get_open_payables_month_total(&self, year_month: &str) -> SqlResult<f64> {
+        let mut stmt = self.conn.prepare(
+            "SELECT SUM(CAST(COALESCE(amt.override_value, invoices.total_amount) AS REAL))
+             FROM invoices
+             LEFT JOIN invoice_overrides status
+               ON status.invoice_id = invoices.id AND status.field_name = 'status'
+             LEFT JOIN invoice_overrides amt
+               ON amt.invoice_id = invoices.id AND amt.field_name = 'total_amount'
+             LEFT JOIN invoice_overrides date_override
+               ON date_override.invoice_id = invoices.id AND date_override.field_name = 'invoice_date'
+             WHERE invoices.category = 'payable'
+               AND COALESCE(status.override_value, invoices.status) = 'open'
+               AND substr(COALESCE(date_override.override_value, invoices.invoice_date), 1, 7) = ?1",
+        )?;
+
+        let total: Option<f64> = stmt.query_row(params![year_month], |row| row.get(0))?;
+        Ok(total.unwrap_or(0.0))
+    }
+
+    pub fn get_status_total_for_month(&self, category: &str, status_value: &str, year_month: &str) -> SqlResult<f64> {
+        let mut stmt = self.conn.prepare(
+            "SELECT SUM(CAST(COALESCE(amt.override_value, invoices.total_amount) AS REAL))
+             FROM invoices
+             LEFT JOIN invoice_overrides status
+               ON status.invoice_id = invoices.id AND status.field_name = 'status'
+             LEFT JOIN invoice_overrides amt
+               ON amt.invoice_id = invoices.id AND amt.field_name = 'total_amount'
+             LEFT JOIN invoice_overrides date_override
+               ON date_override.invoice_id = invoices.id AND date_override.field_name = 'invoice_date'
+             WHERE invoices.category = ?1
+               AND COALESCE(status.override_value, invoices.status) = ?2
+               AND substr(COALESCE(date_override.override_value, invoices.invoice_date), 1, 7) = ?3",
+        )?;
+
+        let total: Option<f64> = stmt.query_row(params![category, status_value, year_month], |row| row.get(0))?;
         Ok(total.unwrap_or(0.0))
     }
 

@@ -5,6 +5,7 @@ use serde::Deserialize;
 use tauri::State;
 
 #[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct UpdateInvoicePayload {
     pub invoice_id: String,
     pub field_name: String,
@@ -12,10 +13,14 @@ pub struct UpdateInvoicePayload {
 }
 
 #[tauri::command]
-pub async fn get_invoices(category: String, state: State<'_, AppState>) -> Result<Vec<InvoiceSummary>, String> {
+pub async fn get_invoices(
+    category: String,
+    year: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<Vec<InvoiceSummary>, String> {
     let db = state.db.lock().map_err(|_| "DB lock".to_string())?;
     let mut summaries = db
-        .get_invoice_summaries(&category)
+        .get_invoice_summaries(&category, year.as_deref())
         .map_err(|e| e.to_string())?;
 
     for summary in summaries.iter_mut() {
@@ -24,6 +29,13 @@ pub async fn get_invoices(category: String, state: State<'_, AppState>) -> Resul
     }
 
     Ok(summaries)
+}
+
+#[tauri::command]
+pub async fn get_invoice_years(category: String, state: State<'_, AppState>) -> Result<Vec<String>, String> {
+    let db = state.db.lock().map_err(|_| "DB lock".to_string())?;
+    db.get_invoice_years(&category)
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]

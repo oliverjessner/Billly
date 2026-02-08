@@ -6,33 +6,29 @@
     "build": {
         "beforeDevCommand": "npm run dev",
         "beforeBuildCommand": "npm run build",
-        "devUrl": "http://localhost:5173",
+        "devUrl": "http://localhost:1420",
         "frontendDist": "../dist"
     },
     "app": {
         "withGlobalTauri": true,
         "windows": [
-        {
-          "title": "Billly",
-          "label": "main",
-          "width": 1200,
-                "height": 970,
+            {
+                "title": "Billly",
+                "label": "main",
+                "width": 1500,
+                "height": 1050,
                 "minWidth": 970,
                 "minHeight": 970,
                 "resizable": true
             }
         ],
-    "security": {
-      "csp": null
-    }
-  },
+        "security": {
+            "csp": null
+        }
+    },
     "bundle": {
         "active": true,
         "targets": "all",
-        "icon": [
-            "icons/icon.png",
-            "icons/icon.ico",
-            "icons/icon.icns"
-        ]
+        "icon": ["icons/icon.png", "icons/icon.ico", "icons/icon.icns"]
     }
 }

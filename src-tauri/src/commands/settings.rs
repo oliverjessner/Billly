@@ -1,10 +1,11 @@
-use crate::models::Settings;
+use crate::models::{Settings, SettingsPublic};
 use crate::services::crypto::CryptoService;
 use crate::services::state::AppState;
 use serde::Deserialize;
 use tauri::{AppHandle, State};
 
 #[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SettingsPayload {
     pub revenue_folder: Option<String>,
     pub payable_folder: Option<String>,
@@ -13,21 +14,38 @@ pub struct SettingsPayload {
 }
 
 #[tauri::command]
-pub async fn get_settings(state: State<'_, AppState>) -> Result<Settings, String> {
+pub async fn get_settings(state: State<'_, AppState>) -> Result<SettingsPublic, String> {
     let db = state.db.lock().map_err(|_| "DB lock".to_string())?;
 
     let revenue_folder = db.get_setting("revenue_folder").map_err(|e| e.to_string())?;
     let payable_folder = db.get_setting("payable_folder").map_err(|e| e.to_string())?;
-    let openai_api_key = db.get_setting("openai_api_key").map_err(|e| e.to_string())?;
     let ocr_language = db
         .get_setting("ocr_language")
         .map_err(|e| e.to_string())?
         .unwrap_or_else(|| "deu".to_string());
-    Ok(Settings {
+
+    let openai_api_key = db.get_setting("openai_api_key").map_err(|e| e.to_string())?;
+    let (openai_api_key_present, openai_api_key_last4) = match openai_api_key {
+        Some(ref encrypted) if !encrypted.trim().is_empty() => {
+            let last4 = CryptoService::decrypt_api_key(encrypted).ok().map(|key| {
+                let chars: Vec<char> = key.chars().collect();
+                if chars.len() >= 4 {
+                    chars[chars.len() - 4..].iter().collect::<String>()
+                } else {
+                    key
+                }
+            });
+            (true, last4)
+        }
+        _ => (false, None),
+    };
+
+    Ok(SettingsPublic {
         revenue_folder,
         payable_folder,
-        openai_api_key,
         ocr_language,
+        openai_api_key_present,
+        openai_api_key_last4,
     })
 }
 
@@ -58,7 +76,7 @@ pub async fn save_settings(
         }
     }
 
-    let settings = get_settings(state.clone()).await.map_err(|e| e.to_string())?;
+    let settings = load_settings_internal(&state).map_err(|e| e.to_string())?;
     state.update_settings(settings, &app).map_err(|e| e.to_string())?;
 
     Ok(())
@@ -66,15 +84,7 @@ pub async fn save_settings(
 
 #[tauri::command]
 pub async fn test_openai_key(api_key: String) -> Result<bool, String> {
-    let client = reqwest::Client::new();
-    let response = client
-        .get("https://api.openai.com/v1/models")
-        .bearer_auth(api_key)
-        .send()
-        .await
-        .map_err(|e| format!("Connection failed: {}", e))?;
-
-    Ok(response.status().is_success())
+    test_openai_key_internal(&api_key).await
 }
 
 #[tauri::command]
@@ -88,4 +98,58 @@ pub async fn pick_folder() -> Result<Option<String>, String> {
         .pick_folder()
         .map(|path| path.to_string_lossy().to_string());
     Ok(selection)
+}
+
+#[tauri::command]
+pub async fn remove_openai_key(state: State<'_, AppState>, app: AppHandle) -> Result<(), String> {
+    {
+        let db = state.db.lock().map_err(|_| "DB lock".to_string())?;
+        db.delete_setting("openai_api_key").map_err(|e| e.to_string())?;
+    }
+    let settings = load_settings_internal(&state).map_err(|e| e.to_string())?;
+    state.update_settings(settings, &app).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn test_openai_key_saved(state: State<'_, AppState>) -> Result<bool, String> {
+    let api_key = {
+        let db = state.db.lock().map_err(|_| "DB lock".to_string())?;
+        let encrypted = db
+            .get_setting("openai_api_key")
+            .map_err(|e| e.to_string())?
+            .ok_or_else(|| "No saved OpenAI key".to_string())?;
+        CryptoService::decrypt_api_key(&encrypted).map_err(|e| e.to_string())?
+    };
+    test_openai_key_internal(&api_key).await
+}
+
+async fn test_openai_key_internal(api_key: &str) -> Result<bool, String> {
+    let client = reqwest::Client::new();
+    let response = client
+        .get("https://api.openai.com/v1/models")
+        .bearer_auth(api_key)
+        .send()
+        .await
+        .map_err(|e| format!("Connection failed: {}", e))?;
+
+    Ok(response.status().is_success())
+}
+
+fn load_settings_internal(state: &State<'_, AppState>) -> Result<Settings, String> {
+    let db = state.db.lock().map_err(|_| "DB lock".to_string())?;
+    let revenue_folder = db.get_setting("revenue_folder").map_err(|e| e.to_string())?;
+    let payable_folder = db.get_setting("payable_folder").map_err(|e| e.to_string())?;
+    let openai_api_key = db.get_setting("openai_api_key").map_err(|e| e.to_string())?;
+    let ocr_language = db
+        .get_setting("ocr_language")
+        .map_err(|e| e.to_string())?
+        .unwrap_or_else(|| "deu".to_string());
+
+    Ok(Settings {
+        revenue_folder,
+        payable_folder,
+        openai_api_key,
+        ocr_language,
+    })
 }

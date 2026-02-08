@@ -61,14 +61,26 @@ pub struct Settings {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SettingsPublic {
+    pub revenue_folder: Option<String>,
+    pub payable_folder: Option<String>,
+    pub ocr_language: String,
+    pub openai_api_key_present: bool,
+    pub openai_api_key_last4: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DashboardStats {
     pub revenue_month: f64,
     pub revenue_year: f64,
     pub payable_month: f64,
     pub payable_year: f64,
+    pub paid_payables_month: f64,
     pub profit_month: f64,
     pub profit_year: f64,
     pub open_payables: f64,
+    pub open_revenue: f64,
+    pub paid_revenue_month: f64,
     pub recent_revenue: Vec<InvoiceSummary>,
     pub recent_payables: Vec<InvoiceSummary>,
     pub chart_months: Vec<String>,

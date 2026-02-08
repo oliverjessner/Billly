@@ -1,10 +1,16 @@
-import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
-import Chart from "chart.js/auto";
+const tauri = window.__TAURI__;
+const invoke = tauri?.core?.invoke ?? (async () => {
+  throw new Error("Tauri core.invoke is not available");
+});
+const listen = tauri?.event?.listen ?? (async () => {
+  throw new Error("Tauri event.listen is not available");
+});
+const Chart = globalThis.Chart;
 
 const state = {
   currentView: "dashboard",
   currentCategory: "revenue",
+  invoiceYear: String(new Date().getFullYear()),
   selectedInvoiceId: null,
   charts: {
     monthly: null,
@@ -37,6 +43,27 @@ function escapeHtml(value) {
     .replaceAll(">", "&gt;");
 }
 
+const MONTH_NAMES = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December"
+];
+
+function monthNameFromValue(value) {
+  if (!value) return "Month";
+  const index = Number.parseInt(value, 10) - 1;
+  return MONTH_NAMES[index] || "Month";
+}
+
 function setActiveView(view) {
   state.currentView = view;
   $$(".tab").forEach((tab) => tab.classList.toggle("active", tab.dataset.view === view));
@@ -44,23 +71,113 @@ function setActiveView(view) {
 }
 
 async function loadDashboard() {
-  const monthValue = $("#month-select").value;
-  const stats = await invoke("get_dashboard_stats", { yearMonth: monthValue || null });
-  renderKpis(stats);
+  const year = $("#year-select").value;
+  const month = $("#month-select").value;
+  const yearMonth = year && month ? `${year}-${month}` : null;
+  const stats = await invoke("get_dashboard_stats", { yearMonth });
+  const yearLabel = year || String(new Date().getFullYear());
+  const monthText = monthNameFromValue(month);
+  renderKpis(stats, yearLabel, month);
   renderRecent("#recent-revenue", stats.recent_revenue);
   renderRecent("#recent-payables", stats.recent_payables);
-  $("#open-payables").textContent = formatCurrency(stats.open_payables);
+  const openPayablesEl = $("#open-payables");
+  if (openPayablesEl) {
+    openPayablesEl.textContent = formatCurrency(stats.open_payables);
+    openPayablesEl.classList.remove("positive", "negative");
+    if (stats.open_payables > 0) {
+      openPayablesEl.classList.add("negative");
+    }
+  }
+  const payablesPanelTitle = $("#payables-panel-title");
+  if (payablesPanelTitle) {
+    payablesPanelTitle.textContent = `Payables (${monthText})`;
+  }
+  const openPayablesLabel = $("#open-payables-label");
+  if (openPayablesLabel) {
+    openPayablesLabel.textContent = "Open Payables";
+  }
+  const paidPayablesEl = $("#paid-payables-month");
+  if (paidPayablesEl) {
+    paidPayablesEl.textContent = formatCurrency(Math.abs(stats.paid_payables_month));
+    paidPayablesEl.classList.remove("positive", "negative");
+    if (stats.paid_payables_month > 0) {
+      paidPayablesEl.classList.add("negative");
+    }
+  }
+  const paidPayablesLabel = $("#paid-payables-label");
+  if (paidPayablesLabel) {
+    paidPayablesLabel.textContent = "Paid Payables";
+  }
+  const revenuePanelTitle = $("#revenue-panel-title");
+  if (revenuePanelTitle) {
+    revenuePanelTitle.textContent = `Revenue (${monthText})`;
+  }
+  const openRevenueLabel = $("#open-revenue-label");
+  if (openRevenueLabel) {
+    openRevenueLabel.textContent = "Open Revenue";
+  }
+  const openRevenueEl = $("#open-revenue");
+  if (openRevenueEl) {
+    openRevenueEl.textContent = formatCurrency(stats.open_revenue);
+    openRevenueEl.classList.remove("positive", "negative");
+    if (stats.open_revenue > 0) {
+      openRevenueEl.classList.add("negative");
+    }
+  }
+  const paidRevenueLabel = $("#paid-revenue-label");
+  if (paidRevenueLabel) {
+    paidRevenueLabel.textContent = "Paid Revenue";
+  }
+  const paidRevenueEl = $("#paid-revenue-month");
+  if (paidRevenueEl) {
+    paidRevenueEl.textContent = formatCurrency(stats.paid_revenue_month);
+    paidRevenueEl.classList.remove("positive", "negative");
+    if (stats.paid_revenue_month > 0) {
+      paidRevenueEl.classList.add("positive");
+    }
+  }
   renderCharts(stats);
 }
 
-function renderKpis(stats) {
+function renderKpis(stats, yearLabel, monthLabel) {
+  const monthText = monthNameFromValue(monthLabel);
   const kpis = [
-    { label: "Revenue (Month)", value: formatCurrency(stats.revenue_month) },
-    { label: "Revenue (Year)", value: formatCurrency(stats.revenue_year) },
-    { label: "Payables (Month)", value: formatCurrency(stats.payable_month) },
-    { label: "Payables (Year)", value: formatCurrency(stats.payable_year) },
-    { label: "Profit (Month)", value: formatCurrency(stats.profit_month) },
-    { label: "Profit (Year)", value: formatCurrency(stats.profit_year) }
+    {
+      label: `Revenue (${monthText})`,
+      value: formatCurrency(stats.revenue_month),
+      amount: stats.revenue_month,
+      kind: "revenue"
+    },
+    {
+      label: `Payables (${monthText})`,
+      value: formatCurrency(Math.abs(stats.payable_month)),
+      amount: stats.payable_month,
+      kind: "payables"
+    },
+    {
+      label: `Profit (${monthText})`,
+      value: formatCurrency(stats.profit_month),
+      amount: stats.profit_month,
+      kind: "profit"
+    },
+    {
+      label: `Revenue (${yearLabel})`,
+      value: formatCurrency(stats.revenue_year),
+      amount: stats.revenue_year,
+      kind: "revenue"
+    },
+    {
+      label: `Payables (${yearLabel})`,
+      value: formatCurrency(Math.abs(stats.payable_year)),
+      amount: stats.payable_year,
+      kind: "payables"
+    },
+    {
+      label: `Profit (${yearLabel})`,
+      value: formatCurrency(stats.profit_year),
+      amount: stats.profit_year,
+      kind: "profit"
+    }
   ];
 
   const container = $("#kpi-grid");
@@ -68,7 +185,18 @@ function renderKpis(stats) {
   kpis.forEach((kpi) => {
     const card = document.createElement("div");
     card.className = "kpi";
-    card.innerHTML = `<div class="label">${kpi.label}</div><div class="value">${kpi.value}</div>`;
+    const numeric = kpi.amount;
+    const valueClass =
+      kpi.kind && typeof numeric === "number"
+        ? kpi.kind === "payables"
+          ? numeric === 0
+            ? "value"
+            : "value negative"
+          : numeric >= 0
+            ? "value positive"
+            : "value negative"
+        : "value";
+    card.innerHTML = `<div class="label">${kpi.label}</div><div class="${valueClass}">${kpi.value}</div>`;
     container.appendChild(card);
   });
 }
@@ -88,6 +216,10 @@ function renderRecent(selector, items) {
 }
 
 function renderCharts(stats) {
+  if (!Chart) {
+    console.error("Chart.js not loaded");
+    return;
+  }
   if (!state.charts.monthly) {
     state.charts.monthly = new Chart($("#chart-monthly"), {
       type: "line",
@@ -113,7 +245,7 @@ function renderCharts(stats) {
       options: {
         responsive: true,
         plugins: {
-          legend: { labels: { color: "#f3f4f6" } }
+          legend: { labels: { color: "#f3f4f6" }, onClick: () => {} }
         },
         scales: {
           x: { ticks: { color: "#9aa3b2" }, grid: { color: "rgba(255,255,255,0.05)" } },
@@ -144,7 +276,7 @@ function renderCharts(stats) {
       options: {
         responsive: true,
         plugins: {
-          legend: { labels: { color: "#f3f4f6" } }
+          legend: { labels: { color: "#f3f4f6" }, onClick: () => {} }
         },
         scales: {
           x: { ticks: { color: "#9aa3b2" }, grid: { color: "rgba(255,255,255,0.05)" } },
@@ -160,15 +292,46 @@ function renderCharts(stats) {
 }
 
 async function loadInvoices() {
-  const list = await invoke("get_invoices", { category: state.currentCategory });
+  const yearSelect = $("#invoice-year");
+  const yearValue = yearSelect ? yearSelect.value : state.invoiceYear;
+  const year = yearValue && yearValue !== "all" ? yearValue : null;
+  const list = await invoke("get_invoices", { category: state.currentCategory, year });
   renderInvoiceList(list);
+}
+
+async function loadInvoiceYears() {
+  const select = $("#invoice-year");
+  if (!select) return;
+  const years = await invoke("get_invoice_years", { category: state.currentCategory });
+  const currentYear = String(new Date().getFullYear());
+  const yearOptions = years.includes(currentYear) ? [...years] : [currentYear, ...years];
+  const current = select.value || state.invoiceYear || currentYear;
+  select.innerHTML = "";
+  const allOption = document.createElement("option");
+  allOption.value = "all";
+  allOption.textContent = "All";
+  select.appendChild(allOption);
+  yearOptions.forEach((year) => {
+    const option = document.createElement("option");
+    option.value = year;
+    option.textContent = year;
+    select.appendChild(option);
+  });
+  if (yearOptions.includes(current)) {
+    select.value = current;
+  } else if (yearOptions.includes(currentYear)) {
+    select.value = currentYear;
+  } else {
+    select.value = "all";
+  }
+  state.invoiceYear = select.value;
 }
 
 function renderInvoiceList(items) {
   const tbody = $("#invoice-list");
   tbody.innerHTML = "";
   if (!items.length) {
-    tbody.innerHTML = `<tr><td colspan="6" class="muted">No invoices</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="5" class="muted">No invoices</td></tr>`;
     return;
   }
 
@@ -178,11 +341,33 @@ function renderInvoiceList(items) {
       <td>${item.invoice_date || "-"}</td>
       <td>${item.counterparty_name || "Unknown"}</td>
       <td>${formatCurrency(item.total_amount)}</td>
-      <td>${item.status}</td>
+      <td>
+        <div class="status-toggle" data-id="${item.id}">
+          <button class="status-option ${item.status === "open" ? "active" : ""}" data-status="open">Open</button>
+          <button class="status-option ${item.status === "paid" ? "active" : ""}" data-status="paid">Paid</button>
+        </div>
+      </td>
       <td>${item.file_path ? item.file_path.split("/").pop() : "-"}</td>
-      <td>${Math.round((item.confidence_score || 0) * 100)}%</td>
     `;
     row.addEventListener("click", () => selectInvoice(item.id));
+    row.querySelectorAll(".status-option").forEach((button) => {
+      button.addEventListener("click", async (event) => {
+        event.stopPropagation();
+        const status = button.dataset.status;
+        await invoke("update_invoice_field", {
+          payload: {
+            invoiceId: item.id,
+            fieldName: "status",
+            value: status
+          }
+        });
+        await loadInvoices();
+        if (state.selectedInvoiceId === item.id) {
+          await selectInvoice(item.id);
+        }
+        await loadDashboard();
+      });
+    });
     tbody.appendChild(row);
   });
 }
@@ -205,22 +390,50 @@ function renderInvoiceDetail(detail) {
     ["currency", "Currency"],
     ["tax_amount", "Tax"],
     ["net_amount", "Net Amount"],
-    ["status", "Status"],
-    ["paid_at", "Paid At"]
+    ["paid_at", "Paid At"],
+    ["confidence_score", "Confidence Score", true]
   ];
 
   container.innerHTML = "";
-  fields.forEach(([key, label]) => {
+  fields.forEach(([key, label, readOnly]) => {
     const row = document.createElement("div");
     row.className = "detail-row";
     row.innerHTML = `
       <span>${label}</span>
       <div class="detail-value">
-        <input data-field="${key}" value="${invoice[key] ?? ""}" />
-        <button class="ghost" data-clear="${key}">Clear override</button>
+        <input data-field="${key}" value="${invoice[key] ?? ""}" ${readOnly ? "readonly" : ""} />
       </div>
     `;
     container.appendChild(row);
+  });
+
+  const statusRow = document.createElement("div");
+  statusRow.className = "detail-row";
+  statusRow.innerHTML = `
+    <span>Status</span>
+    <div class="detail-value">
+      <div class="status-toggle" data-id="${invoice.id}">
+        <button class="status-option ${invoice.status === "open" ? "active" : ""}" data-status="open">Open</button>
+        <button class="status-option ${invoice.status === "paid" ? "active" : ""}" data-status="paid">Paid</button>
+      </div>
+    </div>
+  `;
+  container.appendChild(statusRow);
+
+  statusRow.querySelectorAll(".status-option").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const status = button.dataset.status;
+      await invoke("update_invoice_field", {
+        payload: {
+          invoiceId: invoice.id,
+          fieldName: "status",
+          value: status
+        }
+      });
+      await selectInvoice(invoice.id);
+      await loadInvoices();
+      await loadDashboard();
+    });
   });
 
   const ocrBlock = document.createElement("div");
@@ -241,6 +454,9 @@ function renderInvoiceDetail(detail) {
 
   container.querySelectorAll("input[data-field]").forEach((input) => {
     input.addEventListener("change", async (event) => {
+      if (event.target.hasAttribute("readonly")) {
+        return;
+      }
       const field = event.target.dataset.field;
       await invoke("update_invoice_field", {
         payload: {
@@ -254,26 +470,29 @@ function renderInvoiceDetail(detail) {
     });
   });
 
-  container.querySelectorAll("button[data-clear]").forEach((button) => {
-    button.addEventListener("click", async () => {
-      const field = button.dataset.clear;
-      await invoke("clear_override", {
-        invoiceId: invoice.id,
-        fieldName: field
-      });
-      await selectInvoice(invoice.id);
-      await loadInvoices();
-      await loadDashboard();
-    });
-  });
 }
 
 async function loadSettings() {
   const settings = await invoke("get_settings");
   $("#revenue-folder").value = settings.revenue_folder || "";
   $("#payable-folder").value = settings.payable_folder || "";
-  $("#openai-key").value = "";
+  const openAiInput = $("#openai-key");
+  openAiInput.value = "";
   $("#ocr-language").value = settings.ocr_language || "deu";
+  const savedKeyInput = $("#openai-key-saved");
+  const removeButton = $("#remove-openai-key");
+  if (settings.openai_api_key_present) {
+    const suffix = settings.openai_api_key_last4 ? `•••• ${settings.openai_api_key_last4}` : "••••";
+    savedKeyInput.textContent = suffix;
+    openAiInput.disabled = true;
+    openAiInput.classList.add("disabled");
+    removeButton.classList.remove("hidden");
+  } else {
+    savedKeyInput.textContent = "Not set";
+    openAiInput.disabled = false;
+    openAiInput.classList.remove("disabled");
+    removeButton.classList.add("hidden");
+  }
 }
 
 async function saveSettings() {
@@ -284,17 +503,57 @@ async function saveSettings() {
     ocrLanguage: $("#ocr-language").value
   };
   await invoke("save_settings", { payload });
+  await loadSettings();
   await loadDashboard();
   await loadInvoices();
 }
 
 async function init() {
-  const monthInput = $("#month-select");
   const now = new Date();
-  monthInput.value = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  const yearSelect = $("#year-select");
+  const monthSelect = $("#month-select");
+
+  const currentYear = now.getFullYear();
+  for (let y = currentYear - 5; y <= currentYear + 1; y += 1) {
+    const option = document.createElement("option");
+    option.value = String(y);
+    option.textContent = String(y);
+    yearSelect.appendChild(option);
+  }
+  yearSelect.value = String(currentYear);
+
+  const months = [
+    "01",
+    "02",
+    "03",
+    "04",
+    "05",
+    "06",
+    "07",
+    "08",
+    "09",
+    "10",
+    "11",
+    "12"
+  ];
+  months.forEach((value, index) => {
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = MONTH_NAMES[index] || value;
+    monthSelect.appendChild(option);
+  });
+  monthSelect.value = String(now.getMonth() + 1).padStart(2, "0");
 
   $("#refresh-dashboard").addEventListener("click", loadDashboard);
-  monthInput.addEventListener("change", loadDashboard);
+  yearSelect.addEventListener("change", loadDashboard);
+  monthSelect.addEventListener("change", loadDashboard);
+  const invoiceYearSelect = $("#invoice-year");
+  if (invoiceYearSelect) {
+    invoiceYearSelect.addEventListener("change", async () => {
+      state.invoiceYear = invoiceYearSelect.value;
+      await loadInvoices();
+    });
+  }
 
   $$(".tab").forEach((tab) => {
     tab.addEventListener("click", () => setActiveView(tab.dataset.view));
@@ -305,6 +564,7 @@ async function init() {
       $$(".segment").forEach((s) => s.classList.remove("active"));
       segment.classList.add("active");
       state.currentCategory = segment.dataset.category;
+      await loadInvoiceYears();
       await loadInvoices();
     });
   });
@@ -326,17 +586,27 @@ async function init() {
   $("#save-settings").addEventListener("click", saveSettings);
   $("#test-openai").addEventListener("click", async () => {
     const key = $("#openai-key").value;
-    if (!key) return;
-    const ok = await invoke("test_openai_key", { apiKey: key });
-    setStatus(ok ? "OpenAI key valid" : "OpenAI key invalid", ok);
+    const savedPresent = $("#openai-key-saved").textContent?.startsWith("••••");
+    if (key && key.trim()) {
+      const ok = await invoke("test_openai_key", { apiKey: key });
+      setStatus(ok ? "OpenAI key valid" : "OpenAI key invalid", ok);
+      return;
+    }
+    if (savedPresent) {
+      const ok = await invoke("test_openai_key_saved");
+      setStatus(ok ? "Saved OpenAI key valid" : "Saved OpenAI key invalid", ok);
+      return;
+    }
+    setStatus("No OpenAI key to test", false);
+  });
+
+  $("#remove-openai-key").addEventListener("click", async () => {
+    await invoke("remove_openai_key");
+    await loadSettings();
+    setStatus("OpenAI key removed", true);
   });
 
   $("#reprocess-all").addEventListener("click", async () => {
-    await invoke("reprocess_all");
-    setStatus("Reprocessing started", true);
-  });
-
-  $("#reprocess-visible").addEventListener("click", async () => {
     await invoke("reprocess_all");
     setStatus("Reprocessing started", true);
   });
@@ -357,10 +627,12 @@ async function init() {
 
   await loadSettings();
   await loadDashboard();
+  await loadInvoiceYears();
   await loadInvoices();
 
   await listen("invoice-updated", async () => {
     await loadDashboard();
+    await loadInvoiceYears();
     await loadInvoices();
   });
   await listen("processing-error", (event) => {

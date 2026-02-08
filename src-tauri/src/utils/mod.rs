@@ -5,6 +5,9 @@ use std::fs::File;
 use std::io::Read;
 use std::path::Path;
 
+pub const MAX_FOLDER_DEPTH: usize = 2;
+pub const MAX_SCAN_DEPTH: usize = MAX_FOLDER_DEPTH + 1;
+
 pub fn now_rfc3339() -> String {
     Utc::now().to_rfc3339()
 }
@@ -54,4 +57,12 @@ pub fn normalize_date(value: Option<String>) -> Option<String> {
         }
     }
     Some(raw)
+}
+
+pub fn within_allowed_depth(base: &Path, path: &Path) -> bool {
+    let Ok(relative) = path.strip_prefix(base) else {
+        return false;
+    };
+    let components = relative.components().count();
+    components <= MAX_FOLDER_DEPTH + 1
 }
