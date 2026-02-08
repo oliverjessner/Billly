@@ -6,7 +6,8 @@
     "scripts": {
         "dev": "node scripts/dev-server.mjs",
         "build": "node scripts/build.mjs",
-        "tauri": "tauri"
+        "tauri": "tauri",
+        "build:adhoc-dmg": "bash -lc 'set -euo pipefail; npm run tauri build -- --bundles app; APP=\"src-tauri/target/release/bundle/macos/Billly.app\"; if [ ! -d \"$APP\" ]; then echo \"App not found at $APP\"; exit 1; fi; codesign --force --deep --sign - \"$APP\"; codesign --verify --deep --strict --verbose=2 \"$APP\"; mkdir -p src-tauri/target/release/bundle/dmg; VERSION=$(node -p \"const c=require(\\\"./src-tauri/tauri.conf.json\\\"); c.version || (c.package && c.package.version) || \\\"0.0.0\\\"\"); OUT=\"src-tauri/target/release/bundle/dmg/Billly_${VERSION}_aarch64_adhoc.dmg\"; hdiutil create -volname \"Billly\" -srcfolder \"$APP\" -ov -format UDZO \"$OUT\"; echo \"Created $OUT\";'"
     },
     "dependencies": {
         "@tauri-apps/api": "^2.0.0",
