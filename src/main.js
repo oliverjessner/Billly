@@ -305,7 +305,7 @@ async function loadInvoiceYears() {
   const years = await invoke("get_invoice_years", { category: state.currentCategory });
   const currentYear = String(new Date().getFullYear());
   const yearOptions = years.includes(currentYear) ? [...years] : [currentYear, ...years];
-  const current = select.value || state.invoiceYear || currentYear;
+  const current = state.invoiceYear || select.value || currentYear;
   select.innerHTML = "";
   const allOption = document.createElement("option");
   allOption.value = "all";
@@ -317,7 +317,9 @@ async function loadInvoiceYears() {
     option.textContent = year;
     select.appendChild(option);
   });
-  if (yearOptions.includes(current)) {
+  if (current === "all") {
+    select.value = "all";
+  } else if (yearOptions.includes(current)) {
     select.value = current;
   } else if (yearOptions.includes(currentYear)) {
     select.value = currentYear;
