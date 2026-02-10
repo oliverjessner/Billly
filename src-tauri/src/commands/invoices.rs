@@ -75,6 +75,13 @@ pub async fn clear_override(invoice_id: String, field_name: String, state: State
 }
 
 #[tauri::command]
+pub async fn delete_invoice(invoice_id: String, state: State<'_, AppState>) -> Result<(), String> {
+    let mut db = state.db.lock().map_err(|_| "DB lock".to_string())?;
+    db.delete_invoice(&invoice_id).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
 pub async fn reprocess_invoice(invoice_id: String, state: State<'_, AppState>) -> Result<(), String> {
     let invoice = {
         let db = state.db.lock().map_err(|_| "DB lock".to_string())?;

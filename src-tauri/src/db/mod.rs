@@ -188,6 +188,46 @@ impl Database {
         .optional()
     }
 
+    pub fn get_invoice_by_hash(&self, file_hash: &str) -> SqlResult<Option<Invoice>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, category, file_path, file_hash, file_modified_at, ingestion_status,
+                    ocr_text, extracted_json, confidence_score, invoice_number, invoice_date,
+                    due_date, counterparty_name, total_amount, currency, tax_amount, net_amount,
+                    status, paid_at, created_at, updated_at
+             FROM invoices
+             WHERE file_hash = ?1
+             ORDER BY updated_at DESC
+             LIMIT 1",
+        )?;
+
+        stmt.query_row(params![file_hash], |row| {
+            Ok(Invoice {
+                id: row.get(0)?,
+                category: row.get(1)?,
+                file_path: row.get(2)?,
+                file_hash: row.get(3)?,
+                file_modified_at: row.get(4)?,
+                ingestion_status: row.get(5)?,
+                ocr_text: row.get(6)?,
+                extracted_json: row.get(7)?,
+                confidence_score: row.get(8)?,
+                invoice_number: row.get(9)?,
+                invoice_date: row.get(10)?,
+                due_date: row.get(11)?,
+                counterparty_name: row.get(12)?,
+                total_amount: row.get(13)?,
+                currency: row.get(14)?,
+                tax_amount: row.get(15)?,
+                net_amount: row.get(16)?,
+                status: row.get(17)?,
+                paid_at: row.get(18)?,
+                created_at: row.get(19)?,
+                updated_at: row.get(20)?,
+            })
+        })
+        .optional()
+    }
+
     pub fn get_invoices(&self, category: &str) -> SqlResult<Vec<Invoice>> {
         let mut stmt = self.conn.prepare(
             "SELECT id, category, file_path, file_hash, file_modified_at, ingestion_status,
@@ -235,7 +275,12 @@ impl Database {
              LEFT JOIN invoice_overrides date_override
                ON date_override.invoice_id = invoices.id AND date_override.field_name = 'invoice_date'
              WHERE invoices.category = ?1
-               AND (?2 IS NULL OR substr(COALESCE(date_override.override_value, invoices.invoice_date), 1, 4) = ?2)
+               AND (
+                 ?2 IS NULL
+                 OR substr(COALESCE(date_override.override_value, invoices.invoice_date), 1, 4) = ?2
+                 OR COALESCE(date_override.override_value, invoices.invoice_date) IS NULL
+                 OR COALESCE(date_override.override_value, invoices.invoice_date) = ''
+               )
              ORDER BY COALESCE(date_override.override_value, invoices.invoice_date) DESC",
         )?;
 
@@ -323,6 +368,21 @@ impl Database {
             "DELETE FROM invoice_overrides WHERE invoice_id = ?1",
             params![invoice_id],
         )?;
+        Ok(())
+    }
+
+    pub fn delete_invoice(&mut self, invoice_id: &str) -> SqlResult<()> {
+        let tx = self.conn.transaction()?;
+        tx.execute(
+            "DELETE FROM processing_logs WHERE invoice_id = ?1",
+            params![invoice_id],
+        )?;
+        tx.execute(
+            "DELETE FROM invoice_overrides WHERE invoice_id = ?1",
+            params![invoice_id],
+        )?;
+        tx.execute("DELETE FROM invoices WHERE id = ?1", params![invoice_id])?;
+        tx.commit()?;
         Ok(())
     }
 

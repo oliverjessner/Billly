@@ -98,7 +98,18 @@ impl AppState {
                         let _ = app_handle.emit("invoice-updated", invoice);
                     }
                     Err(err) => {
-                        let _ = app_handle.emit("processing-error", err.to_string());
+                        let invoice_opt = {
+                            if let Ok(db_lock) = db.lock() {
+                                db_lock.get_invoice_by_path(&path.to_string_lossy()).ok().flatten()
+                            } else {
+                                None
+                            }
+                        };
+                        if let Some(mut invoice) = invoice_opt {
+                            let _ = mark_failed(&db, &mut invoice, &format!("{:#}", err));
+                            let _ = app_handle.emit("invoice-updated", invoice);
+                        }
+                        let _ = app_handle.emit("processing-error", format!("{:#}", err));
                     }
                 }
             });
@@ -149,9 +160,10 @@ fn handle_event(event: FileEvent, db: &Arc<Mutex<Database>>, settings: &Arc<Mute
                             }
                         };
                         if let Some(mut invoice) = invoice_opt {
-                            let _ = mark_failed(&db, &mut invoice, &err.to_string());
+                            let _ = mark_failed(&db, &mut invoice, &format!("{:#}", err));
+                            let _ = app_handle.emit("invoice-updated", invoice);
                         }
-                        let _ = app_handle.emit("processing-error", err.to_string());
+                        let _ = app_handle.emit("processing-error", format!("{:#}", err));
                     }
                 }
             });

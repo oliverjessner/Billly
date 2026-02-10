@@ -167,7 +167,8 @@ body {
 }
 
 .primary,
-.ghost {
+.ghost,
+.danger {
   border: none;
   padding: 10px 16px;
   border-radius: 10px;
@@ -187,8 +188,15 @@ body {
   color: var(--text);
 }
 
+.danger {
+  background: rgba(239, 68, 68, 0.18);
+  color: #fecaca;
+  box-shadow: 0 10px 20px rgba(239, 68, 68, 0.25);
+}
+
 .primary:hover,
-.ghost:hover {
+.ghost:hover,
+.danger:hover {
   transform: translateY(-1px);
 }
 
@@ -404,8 +412,17 @@ body {
   cursor: pointer;
 }
 
+.table tbody tr.selected {
+  background: rgba(217, 70, 239, 0.12);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
 .table tbody tr:hover {
   background: rgba(255, 255, 255, 0.04);
+}
+
+.table tbody tr.selected:hover {
+  background: rgba(217, 70, 239, 0.18);
 }
 
 .detail {

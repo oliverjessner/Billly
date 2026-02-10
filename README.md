@@ -4,6 +4,12 @@ A fully automated local bot that handles your small business finances
 
 billly with 3 l
 
+## Build
+
+```bash
+npm run build:adhoc-dmg
+```
+
 ## SQLite database location
 
 The app stores the SQLite database in the OS app data directory:

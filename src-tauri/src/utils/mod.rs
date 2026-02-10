@@ -59,6 +59,13 @@ pub fn normalize_date(value: Option<String>) -> Option<String> {
     Some(raw)
 }
 
+pub fn normalize_api_key(value: &str) -> String {
+    value
+        .chars()
+        .filter(|c| c.is_ascii_graphic() && !c.is_ascii_whitespace())
+        .collect()
+}
+
 pub fn within_allowed_depth(base: &Path, path: &Path) -> bool {
     let Ok(relative) = path.strip_prefix(base) else {
         return false;

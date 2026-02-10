@@ -105,6 +105,7 @@ fn main() {
             commands::invoices::update_invoice_field,
             commands::invoices::clear_overrides,
             commands::invoices::clear_override,
+            commands::invoices::delete_invoice,
             commands::invoices::reprocess_invoice,
             commands::invoices::open_invoice_file,
         ])
@@ -115,7 +116,11 @@ fn main() {
 fn load_settings(db: &db::Database) -> Settings {
     let revenue_folder = db.get_setting("revenue_folder").ok().flatten();
     let payable_folder = db.get_setting("payable_folder").ok().flatten();
-    let openai_api_key = db.get_setting("openai_api_key").ok().flatten();
+    let mut openai_api_key = db.get_setting("openai_api_key").ok().flatten();
+    if matches!(openai_api_key.as_deref(), Some(value) if value.starts_with("keychain:")) {
+        let _ = db.delete_setting("openai_api_key");
+        openai_api_key = None;
+    }
     let ocr_language = db
         .get_setting("ocr_language")
         .ok()

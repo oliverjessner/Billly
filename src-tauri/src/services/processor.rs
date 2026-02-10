@@ -7,7 +7,9 @@ use crate::models::{ExtractedInvoiceData, Invoice, Settings};
 use crate::services::crypto::CryptoService;
 use crate::services::openai::OpenAIExtractor;
 use crate::services::text_extraction::TextExtractor;
-use crate::utils::{format_decimal, modified_time_rfc3339, normalize_date, now_rfc3339, sha256_file};
+use crate::utils::{
+    format_decimal, modified_time_rfc3339, normalize_api_key, normalize_date, now_rfc3339, sha256_file,
+};
 
 pub async fn process_invoice(
     db: &Arc<Mutex<Database>>,
@@ -27,6 +29,26 @@ pub async fn process_invoice(
     if let Some(existing) = &existing {
         if existing.file_hash == file_hash && existing.file_modified_at == file_modified_at {
             return Ok(existing.clone());
+        }
+    }
+
+    if existing.is_none() {
+        let by_hash = {
+            let db = db.lock().map_err(|_| anyhow!("DB lock poisoned"))?;
+            db.get_invoice_by_hash(&file_hash)?
+        };
+
+        if let Some(mut existing) = by_hash {
+            if existing.category == category {
+                if existing.file_path.as_deref() != Some(&file_path) {
+                    existing.file_path = Some(file_path.clone());
+                    existing.file_modified_at = file_modified_at.clone();
+                    existing.updated_at = now_rfc3339();
+                    let db = db.lock().map_err(|_| anyhow!("DB lock poisoned"))?;
+                    db.upsert_invoice(&existing)?;
+                }
+                return Ok(existing);
+            }
         }
     }
 
@@ -74,8 +96,12 @@ pub async fn process_invoice(
         .as_ref()
         .ok_or_else(|| anyhow!("OpenAI API key missing"))?;
     let decrypted_key = CryptoService::decrypt_api_key(api_key)?;
+    let normalized_key = normalize_api_key(&decrypted_key);
+    if normalized_key.is_empty() {
+        return Err(anyhow!("OpenAI API key is empty or invalid"));
+    }
 
-    let (data, raw_json) = OpenAIExtractor::extract_invoice_data(&decrypted_key, &text).await?;
+    let (data, raw_json) = OpenAIExtractor::extract_invoice_data(&normalized_key, &text).await?;
     apply_extracted(&mut invoice, data, raw_json);
     invoice.ingestion_status = "processed".to_string();
     invoice.updated_at = now_rfc3339();

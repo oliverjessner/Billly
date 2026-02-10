@@ -12,38 +12,17 @@ pub struct CryptoService;
 
 impl CryptoService {
     pub fn encrypt_api_key(api_key: &str) -> Result<String> {
-        if let Ok(reference) = Self::store_in_keychain(api_key) {
-            return Ok(reference);
-        }
         Self::encrypt_symmetric(api_key)
     }
 
     pub fn decrypt_api_key(encrypted: &str) -> Result<String> {
-        if encrypted.starts_with("keychain:") {
-            return Self::retrieve_from_keychain(encrypted);
-        }
         if encrypted.starts_with("enc:") {
             return Self::decrypt_symmetric(encrypted);
         }
-        Err(anyhow!("Unknown encrypted format"))
-    }
-
-    fn store_in_keychain(api_key: &str) -> Result<String> {
-        keyring::Entry::new("billly", "openai_api_key")
-            .map_err(|e| anyhow!("Keychain error: {}", e))?
-            .set_password(api_key)
-            .map_err(|e| anyhow!("Keychain store error: {}", e))?;
-        Ok("keychain:billly:openai_api_key".to_string())
-    }
-
-    fn retrieve_from_keychain(reference: &str) -> Result<String> {
-        if reference != "keychain:billly:openai_api_key" {
-            return Err(anyhow!("Invalid keychain reference"));
+        if encrypted.starts_with("keychain:") {
+            return Err(anyhow!("Keychain storage is disabled"));
         }
-        keyring::Entry::new("billly", "openai_api_key")
-            .map_err(|e| anyhow!("Keychain error: {}", e))?
-            .get_password()
-            .map_err(|e| anyhow!("Keychain fetch error: {}", e))
+        Err(anyhow!("Unknown encrypted format"))
     }
 
     fn encrypt_symmetric(plaintext: &str) -> Result<String> {
