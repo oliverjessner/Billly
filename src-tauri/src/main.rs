@@ -95,7 +95,6 @@ fn main() {
             commands::settings::save_settings,
             commands::settings::test_openai_key,
             commands::settings::test_openai_key_saved,
-            commands::settings::reprocess_all,
             commands::settings::pick_folder,
             commands::settings::remove_openai_key,
             commands::dashboard::get_dashboard_stats,
@@ -103,6 +102,7 @@ fn main() {
             commands::invoices::get_invoice_years,
             commands::invoices::get_invoice_detail,
             commands::invoices::update_invoice_field,
+            commands::invoices::update_invoice_tags,
             commands::invoices::clear_overrides,
             commands::invoices::clear_override,
             commands::invoices::delete_invoice,
@@ -121,15 +121,9 @@ fn load_settings(db: &db::Database) -> Settings {
         let _ = db.delete_setting("openai_api_key");
         openai_api_key = None;
     }
-    let ocr_language = db
-        .get_setting("ocr_language")
-        .ok()
-        .flatten()
-        .unwrap_or_else(|| "deu".to_string());
     Settings {
         revenue_folder,
         payable_folder,
         openai_api_key,
-        ocr_language,
     }
 }

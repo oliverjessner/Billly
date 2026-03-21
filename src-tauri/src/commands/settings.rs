@@ -11,7 +11,6 @@ pub struct SettingsPayload {
     pub revenue_folder: Option<String>,
     pub payable_folder: Option<String>,
     pub openai_api_key: Option<String>,
-    pub ocr_language: Option<String>,
 }
 
 #[tauri::command]
@@ -20,11 +19,6 @@ pub async fn get_settings(state: State<'_, AppState>) -> Result<SettingsPublic, 
 
     let revenue_folder = db.get_setting("revenue_folder").map_err(|e| e.to_string())?;
     let payable_folder = db.get_setting("payable_folder").map_err(|e| e.to_string())?;
-    let ocr_language = db
-        .get_setting("ocr_language")
-        .map_err(|e| e.to_string())?
-        .unwrap_or_else(|| "deu".to_string());
-
     let mut openai_api_key = db.get_setting("openai_api_key").map_err(|e| e.to_string())?;
     if matches!(openai_api_key.as_deref(), Some(value) if value.starts_with("keychain:")) {
         db.delete_setting("openai_api_key").map_err(|e| e.to_string())?;
@@ -49,7 +43,6 @@ pub async fn get_settings(state: State<'_, AppState>) -> Result<SettingsPublic, 
     Ok(SettingsPublic {
         revenue_folder,
         payable_folder,
-        ocr_language,
         openai_api_key_present,
         openai_api_key_last4,
     })
@@ -70,9 +63,6 @@ pub async fn save_settings(
         if let Some(value) = payload.payable_folder.clone() {
             db.set_setting("payable_folder", &value).map_err(|e| e.to_string())?;
         }
-        if let Some(value) = payload.ocr_language.clone() {
-            db.set_setting("ocr_language", &value).map_err(|e| e.to_string())?;
-        }
         if let Some(api_key) = payload.openai_api_key.clone() {
             let normalized = normalize_api_key(&api_key);
             if !normalized.is_empty() {
@@ -92,11 +82,6 @@ pub async fn save_settings(
 #[tauri::command]
 pub async fn test_openai_key(api_key: String) -> Result<bool, String> {
     test_openai_key_internal(&api_key).await
-}
-
-#[tauri::command]
-pub async fn reprocess_all(state: State<'_, AppState>, app: AppHandle) -> Result<(), String> {
-    state.enqueue_scan(&app).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -160,15 +145,9 @@ fn load_settings_internal(state: &State<'_, AppState>) -> Result<Settings, Strin
         db.delete_setting("openai_api_key").map_err(|e| e.to_string())?;
         openai_api_key = None;
     }
-    let ocr_language = db
-        .get_setting("ocr_language")
-        .map_err(|e| e.to_string())?
-        .unwrap_or_else(|| "deu".to_string());
-
     Ok(Settings {
         revenue_folder,
         payable_folder,
         openai_api_key,
-        ocr_language,
     })
 }

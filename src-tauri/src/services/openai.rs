@@ -3,7 +3,7 @@ use jsonschema::JSONSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
-use crate::models::ExtractedInvoiceData;
+use crate::models::{normalize_payable_tags, ExtractedInvoiceData, PAYABLE_TAG_OPTIONS};
 
 #[derive(Serialize)]
 struct ChatRequest {
@@ -43,9 +43,9 @@ struct ResponseMessage {
 pub struct OpenAIExtractor;
 
 impl OpenAIExtractor {
-    pub async fn extract_invoice_data(api_key: &str, text: &str) -> Result<(ExtractedInvoiceData, String)> {
+    pub async fn extract_invoice_data(api_key: &str, text: &str, category: &str) -> Result<(ExtractedInvoiceData, String)> {
         let schema = extraction_schema();
-        let prompt = system_prompt();
+        let prompt = system_prompt(category);
         let user = format!("Invoice text:\n{}", text);
 
         let mut raw = call_openai(api_key, &prompt, &user).await?;
@@ -67,6 +67,10 @@ impl OpenAIExtractor {
         if data.currency.is_none() {
             data.currency = Some("EUR".to_string());
         }
+        data.tags = Some(match data.tags.take() {
+            Some(tags) if category == "payable" => normalize_payable_tags(tags),
+            _ => Vec::new(),
+        });
         if data.extraction_notes.trim().is_empty() {
             data.extraction_notes = "notes missing".to_string();
         }
@@ -132,7 +136,7 @@ fn extraction_schema() -> JSONSchema {
     let schema = json!({
         "type": "object",
         "additionalProperties": false,
-        "required": ["total_amount", "currency", "invoice_date", "extraction_notes"],
+        "required": ["total_amount", "currency", "invoice_date", "tags", "extraction_notes"],
         "properties": {
             "invoice_number": {"type": ["string", "null"]},
             "invoice_date": {"type": ["string", "null"]},
@@ -142,6 +146,10 @@ fn extraction_schema() -> JSONSchema {
             "currency": {"type": ["string", "null"]},
             "tax_amount": {"type": ["number", "null"]},
             "net_amount": {"type": ["number", "null"]},
+            "tags": {
+                "type": ["array", "null"],
+                "items": {"type": "string", "enum": PAYABLE_TAG_OPTIONS}
+            },
             "extraction_notes": {"type": "string"},
             "confidence_score": {"type": ["number", "null"]}
         }
@@ -174,8 +182,18 @@ fn compute_confidence(data: &ExtractedInvoiceData) -> f64 {
     score.clamp(0.0, 1.0)
 }
 
-fn system_prompt() -> String {
-    r#"You are an invoice extraction system. Return JSON only and match the schema exactly.
+fn system_prompt(category: &str) -> String {
+    let payable_hint = if category == "payable" {
+        format!(
+            "For tags, choose zero to three labels only from this list: {}. Use [] if nothing fits clearly.",
+            PAYABLE_TAG_OPTIONS.join(", ")
+        )
+    } else {
+        "For tags, always return an empty array because tagging only applies to payables.".to_string()
+    };
+
+    format!(
+        r#"You are an invoice extraction system. Return JSON only and match the schema exactly.
 Fields:
 - invoice_number (string|null)
 - invoice_date (YYYY-MM-DD|null)
@@ -185,8 +203,11 @@ Fields:
 - currency (string|null)
 - tax_amount (number|null)
 - net_amount (number|null)
+- tags (array of strings|null)
 - extraction_notes (string, short)
 - confidence_score (number|null)
-"#
-        .to_string()
+{}
+"#,
+        payable_hint
+    )
 }

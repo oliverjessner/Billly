@@ -1,11 +1,22 @@
 use rusqlite::{params, Connection, OptionalExtension, Result as SqlResult};
+use serde_json;
 use std::path::PathBuf;
 
-use crate::models::{Invoice, InvoiceOverride, InvoiceSummary};
+use crate::models::{DashboardListItem, Invoice, InvoiceOverride, InvoiceSummary};
 
 pub struct Database {
     conn: Connection,
 }
+
+const BASELINE_MIGRATION_NAME: &str = "001_init_schema.sql";
+const LEGACY_MIGRATION_NAMES: &[&str] = &[
+    "001_create_invoices.sql",
+    "002_create_overrides_and_settings.sql",
+    "003_create_processing_logs_table.sql",
+    "004_normalize_payables.sql",
+    "005_add_invoice_tags.sql",
+    "006_add_document_language.sql",
+];
 
 impl Database {
     pub fn new(db_path: PathBuf) -> SqlResult<Self> {
@@ -24,58 +35,61 @@ impl Database {
             );",
         )?;
 
-        let migrations = vec![
-            (
-                "001_create_invoices.sql",
-                include_str!(concat!(
-                    env!("CARGO_MANIFEST_DIR"),
-                    "/../migrations/001_create_invoices.sql"
-                )),
-            ),
-            (
-                "002_create_overrides_and_settings.sql",
-                include_str!(concat!(
-                    env!("CARGO_MANIFEST_DIR"),
-                    "/../migrations/002_create_overrides_and_settings.sql"
-                )),
-            ),
-            (
-                "003_create_processing_logs_table.sql",
-                include_str!(concat!(
-                    env!("CARGO_MANIFEST_DIR"),
-                    "/../migrations/003_create_processing_logs_table.sql"
-                )),
-            ),
-            (
-                "004_normalize_payables.sql",
-                include_str!(concat!(
-                    env!("CARGO_MANIFEST_DIR"),
-                    "/../migrations/004_normalize_payables.sql"
-                )),
-            ),
-        ];
-
-        for (name, sql) in migrations {
-            let applied: Option<String> = self
-                .conn
-                .query_row(
-                    "SELECT name FROM schema_migrations WHERE name = ?1",
-                    params![name],
-                    |row| row.get(0),
-                )
-                .optional()?;
-
-            if applied.is_none() {
-                let tx = self.conn.transaction()?;
-                tx.execute_batch(sql)?;
-                tx.execute(
-                    "INSERT INTO schema_migrations (name, applied_at) VALUES (?1, datetime('now'))",
-                    params![name],
-                )?;
-                tx.commit()?;
-            }
+        if self.is_migration_applied(BASELINE_MIGRATION_NAME)? {
+            return Ok(());
         }
 
+        if self.has_applied_legacy_migrations()? {
+            self.mark_migration_applied(BASELINE_MIGRATION_NAME)?;
+            return Ok(());
+        }
+
+        let tx = self.conn.transaction()?;
+        tx.execute_batch(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../migrations/001_init_schema.sql"
+        )))?;
+        tx.execute(
+            "INSERT INTO schema_migrations (name, applied_at) VALUES (?1, datetime('now'))",
+            params![BASELINE_MIGRATION_NAME],
+        )?;
+        tx.commit()?;
+
+        Ok(())
+    }
+
+    fn is_migration_applied(&self, name: &str) -> SqlResult<bool> {
+        let applied: Option<String> = self
+            .conn
+            .query_row(
+                "SELECT name FROM schema_migrations WHERE name = ?1",
+                params![name],
+                |row| row.get(0),
+            )
+            .optional()?;
+        Ok(applied.is_some())
+    }
+
+    fn has_applied_legacy_migrations(&self) -> SqlResult<bool> {
+        let placeholders = LEGACY_MIGRATION_NAMES
+            .iter()
+            .map(|_| "?")
+            .collect::<Vec<_>>()
+            .join(", ");
+        let sql = format!(
+            "SELECT 1 FROM schema_migrations WHERE name IN ({}) LIMIT 1",
+            placeholders
+        );
+        let mut stmt = self.conn.prepare(&sql)?;
+        let mut rows = stmt.query(rusqlite::params_from_iter(LEGACY_MIGRATION_NAMES.iter().copied()))?;
+        Ok(rows.next()?.is_some())
+    }
+
+    fn mark_migration_applied(&self, name: &str) -> SqlResult<()> {
+        self.conn.execute(
+            "INSERT OR IGNORE INTO schema_migrations (name, applied_at) VALUES (?1, datetime('now'))",
+            params![name],
+        )?;
         Ok(())
     }
 
@@ -85,8 +99,8 @@ impl Database {
                 id, category, file_path, file_hash, file_modified_at, ingestion_status,
                 ocr_text, extracted_json, confidence_score, invoice_number, invoice_date,
                 due_date, counterparty_name, total_amount, currency, tax_amount, net_amount,
-                status, paid_at, created_at, updated_at
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21)",
+                status, paid_at, document_language, tags, created_at, updated_at
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23)",
             params![
                 invoice.id,
                 invoice.category,
@@ -107,6 +121,8 @@ impl Database {
                 invoice.net_amount,
                 invoice.status,
                 invoice.paid_at,
+                invoice.document_language,
+                tags_to_json(&invoice.tags),
                 invoice.created_at,
                 invoice.updated_at
             ],
@@ -119,7 +135,7 @@ impl Database {
             "SELECT id, category, file_path, file_hash, file_modified_at, ingestion_status,
                     ocr_text, extracted_json, confidence_score, invoice_number, invoice_date,
                     due_date, counterparty_name, total_amount, currency, tax_amount, net_amount,
-                    status, paid_at, created_at, updated_at
+                    status, paid_at, document_language, tags, created_at, updated_at
              FROM invoices WHERE id = ?1",
         )?;
 
@@ -144,8 +160,10 @@ impl Database {
                 net_amount: row.get(16)?,
                 status: row.get(17)?,
                 paid_at: row.get(18)?,
-                created_at: row.get(19)?,
-                updated_at: row.get(20)?,
+                document_language: row.get(19)?,
+                tags: parse_tags_json(row.get::<_, String>(20)?),
+                created_at: row.get(21)?,
+                updated_at: row.get(22)?,
             })
         })
         .optional()
@@ -156,7 +174,7 @@ impl Database {
             "SELECT id, category, file_path, file_hash, file_modified_at, ingestion_status,
                     ocr_text, extracted_json, confidence_score, invoice_number, invoice_date,
                     due_date, counterparty_name, total_amount, currency, tax_amount, net_amount,
-                    status, paid_at, created_at, updated_at
+                    status, paid_at, document_language, tags, created_at, updated_at
              FROM invoices WHERE file_path = ?1",
         )?;
 
@@ -181,8 +199,10 @@ impl Database {
                 net_amount: row.get(16)?,
                 status: row.get(17)?,
                 paid_at: row.get(18)?,
-                created_at: row.get(19)?,
-                updated_at: row.get(20)?,
+                document_language: row.get(19)?,
+                tags: parse_tags_json(row.get::<_, String>(20)?),
+                created_at: row.get(21)?,
+                updated_at: row.get(22)?,
             })
         })
         .optional()
@@ -193,7 +213,7 @@ impl Database {
             "SELECT id, category, file_path, file_hash, file_modified_at, ingestion_status,
                     ocr_text, extracted_json, confidence_score, invoice_number, invoice_date,
                     due_date, counterparty_name, total_amount, currency, tax_amount, net_amount,
-                    status, paid_at, created_at, updated_at
+                    status, paid_at, document_language, tags, created_at, updated_at
              FROM invoices
              WHERE file_hash = ?1
              ORDER BY updated_at DESC
@@ -221,8 +241,10 @@ impl Database {
                 net_amount: row.get(16)?,
                 status: row.get(17)?,
                 paid_at: row.get(18)?,
-                created_at: row.get(19)?,
-                updated_at: row.get(20)?,
+                document_language: row.get(19)?,
+                tags: parse_tags_json(row.get::<_, String>(20)?),
+                created_at: row.get(21)?,
+                updated_at: row.get(22)?,
             })
         })
         .optional()
@@ -233,7 +255,7 @@ impl Database {
             "SELECT id, category, file_path, file_hash, file_modified_at, ingestion_status,
                     ocr_text, extracted_json, confidence_score, invoice_number, invoice_date,
                     due_date, counterparty_name, total_amount, currency, tax_amount, net_amount,
-                    status, paid_at, created_at, updated_at
+                    status, paid_at, document_language, tags, created_at, updated_at
              FROM invoices
              WHERE category = ?1
              ORDER BY invoice_date DESC",
@@ -260,8 +282,10 @@ impl Database {
                 net_amount: row.get(16)?,
                 status: row.get(17)?,
                 paid_at: row.get(18)?,
-                created_at: row.get(19)?,
-                updated_at: row.get(20)?,
+                document_language: row.get(19)?,
+                tags: parse_tags_json(row.get::<_, String>(20)?),
+                created_at: row.get(21)?,
+                updated_at: row.get(22)?,
             })
         })?;
 
@@ -371,6 +395,16 @@ impl Database {
         Ok(())
     }
 
+    pub fn set_invoice_tags(&self, invoice_id: &str, tags: &[String]) -> SqlResult<()> {
+        self.conn.execute(
+            "UPDATE invoices
+             SET tags = ?2, updated_at = datetime('now')
+             WHERE id = ?1",
+            params![invoice_id, tags_to_json(tags)],
+        )?;
+        Ok(())
+    }
+
     pub fn delete_invoice(&mut self, invoice_id: &str) -> SqlResult<()> {
         let tx = self.conn.transaction()?;
         tx.execute(
@@ -436,73 +470,52 @@ impl Database {
         Ok(total.unwrap_or(0.0))
     }
 
-    pub fn get_paid_payables_month_total(&self, year_month: &str) -> SqlResult<f64> {
+    pub fn get_overdue_total(&self, category: &str, today: &str) -> SqlResult<f64> {
         let mut stmt = self.conn.prepare(
-            "SELECT SUM(CAST(COALESCE(amt.override_value, invoices.total_amount) AS REAL))
+            "SELECT SUM(CAST(COALESCE(NULLIF(amt.override_value, ''), invoices.total_amount) AS REAL))
              FROM invoices
-             LEFT JOIN invoice_overrides status
-               ON status.invoice_id = invoices.id AND status.field_name = 'status'
              LEFT JOIN invoice_overrides amt
                ON amt.invoice_id = invoices.id AND amt.field_name = 'total_amount'
-             LEFT JOIN invoice_overrides date_override
-               ON date_override.invoice_id = invoices.id AND date_override.field_name = 'invoice_date'
-             WHERE invoices.category = 'payable'
-               AND COALESCE(status.override_value, invoices.status) = 'paid'
-               AND substr(COALESCE(date_override.override_value, invoices.invoice_date), 1, 7) = ?1",
-        )?;
-
-        let total: Option<f64> = stmt.query_row(params![year_month], |row| row.get(0))?;
-        Ok(total.unwrap_or(0.0))
-    }
-
-    pub fn get_open_payables_month_total(&self, year_month: &str) -> SqlResult<f64> {
-        let mut stmt = self.conn.prepare(
-            "SELECT SUM(CAST(COALESCE(amt.override_value, invoices.total_amount) AS REAL))
-             FROM invoices
              LEFT JOIN invoice_overrides status
                ON status.invoice_id = invoices.id AND status.field_name = 'status'
-             LEFT JOIN invoice_overrides amt
-               ON amt.invoice_id = invoices.id AND amt.field_name = 'total_amount'
-             LEFT JOIN invoice_overrides date_override
-               ON date_override.invoice_id = invoices.id AND date_override.field_name = 'invoice_date'
-             WHERE invoices.category = 'payable'
-               AND COALESCE(status.override_value, invoices.status) = 'open'
-               AND substr(COALESCE(date_override.override_value, invoices.invoice_date), 1, 7) = ?1",
-        )?;
-
-        let total: Option<f64> = stmt.query_row(params![year_month], |row| row.get(0))?;
-        Ok(total.unwrap_or(0.0))
-    }
-
-    pub fn get_status_total_for_month(&self, category: &str, status_value: &str, year_month: &str) -> SqlResult<f64> {
-        let mut stmt = self.conn.prepare(
-            "SELECT SUM(CAST(COALESCE(amt.override_value, invoices.total_amount) AS REAL))
-             FROM invoices
-             LEFT JOIN invoice_overrides status
-               ON status.invoice_id = invoices.id AND status.field_name = 'status'
-             LEFT JOIN invoice_overrides amt
-               ON amt.invoice_id = invoices.id AND amt.field_name = 'total_amount'
-             LEFT JOIN invoice_overrides date_override
-               ON date_override.invoice_id = invoices.id AND date_override.field_name = 'invoice_date'
+             LEFT JOIN invoice_overrides due_override
+               ON due_override.invoice_id = invoices.id AND due_override.field_name = 'due_date'
              WHERE invoices.category = ?1
-               AND COALESCE(status.override_value, invoices.status) = ?2
-               AND substr(COALESCE(date_override.override_value, invoices.invoice_date), 1, 7) = ?3",
+               AND COALESCE(NULLIF(status.override_value, ''), invoices.status) = 'open'
+               AND COALESCE(NULLIF(due_override.override_value, ''), invoices.due_date) IS NOT NULL
+               AND COALESCE(NULLIF(due_override.override_value, ''), invoices.due_date) != ''
+               AND COALESCE(NULLIF(due_override.override_value, ''), invoices.due_date) < ?2",
         )?;
 
-        let total: Option<f64> = stmt.query_row(params![category, status_value, year_month], |row| row.get(0))?;
+        let total: Option<f64> = stmt.query_row(params![category, today], |row| row.get(0))?;
         Ok(total.unwrap_or(0.0))
     }
 
-    pub fn get_recent_invoices(&self, category: &str, limit: usize) -> SqlResult<Vec<InvoiceSummary>> {
+    pub fn get_invoice_summaries_by_status(&self, category: &str, status_value: &str) -> SqlResult<Vec<InvoiceSummary>> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, invoice_date, counterparty_name, total_amount, status, confidence_score, file_path
+            "SELECT invoices.id,
+                    COALESCE(NULLIF(date_override.override_value, ''), invoices.invoice_date) AS invoice_date,
+                    COALESCE(NULLIF(counterparty.override_value, ''), invoices.counterparty_name) AS counterparty_name,
+                    COALESCE(NULLIF(amt.override_value, ''), invoices.total_amount) AS total_amount,
+                    COALESCE(NULLIF(status.override_value, ''), invoices.status) AS status,
+                    invoices.confidence_score,
+                    invoices.file_path
              FROM invoices
-             WHERE category = ?1
-             ORDER BY invoice_date DESC
-             LIMIT ?2",
+             LEFT JOIN invoice_overrides status
+               ON status.invoice_id = invoices.id AND status.field_name = 'status'
+             LEFT JOIN invoice_overrides amt
+               ON amt.invoice_id = invoices.id AND amt.field_name = 'total_amount'
+             LEFT JOIN invoice_overrides date_override
+               ON date_override.invoice_id = invoices.id AND date_override.field_name = 'invoice_date'
+             LEFT JOIN invoice_overrides counterparty
+               ON counterparty.invoice_id = invoices.id AND counterparty.field_name = 'counterparty_name'
+             WHERE invoices.category = ?1
+               AND COALESCE(NULLIF(status.override_value, ''), invoices.status) = ?2
+             ORDER BY COALESCE(NULLIF(date_override.override_value, ''), invoices.invoice_date) DESC,
+                      invoices.created_at DESC",
         )?;
 
-        let rows = stmt.query_map(params![category, limit as i32], |row| {
+        let rows = stmt.query_map(params![category, status_value], |row| {
             Ok(InvoiceSummary {
                 id: row.get(0)?,
                 invoice_date: row.get(1)?,
@@ -511,6 +524,39 @@ impl Database {
                 status: row.get(4)?,
                 confidence_score: row.get(5)?,
                 file_path: row.get(6)?,
+            })
+        })?;
+
+        rows.collect()
+    }
+
+    pub fn get_top_counterparties_by_year(
+        &self,
+        category: &str,
+        year: &str,
+        limit: usize,
+    ) -> SqlResult<Vec<DashboardListItem>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT COALESCE(NULLIF(TRIM(COALESCE(NULLIF(counterparty.override_value, ''), invoices.counterparty_name)), ''), 'Unknown') AS label,
+                    SUM(CAST(COALESCE(NULLIF(amt.override_value, ''), invoices.total_amount) AS REAL)) AS total_amount
+             FROM invoices
+             LEFT JOIN invoice_overrides amt
+               ON amt.invoice_id = invoices.id AND amt.field_name = 'total_amount'
+             LEFT JOIN invoice_overrides date_override
+               ON date_override.invoice_id = invoices.id AND date_override.field_name = 'invoice_date'
+             LEFT JOIN invoice_overrides counterparty
+               ON counterparty.invoice_id = invoices.id AND counterparty.field_name = 'counterparty_name'
+             WHERE invoices.category = ?1
+               AND substr(COALESCE(NULLIF(date_override.override_value, ''), invoices.invoice_date), 1, 4) = ?2
+             GROUP BY label
+             ORDER BY total_amount DESC, label ASC
+             LIMIT ?3",
+        )?;
+
+        let rows = stmt.query_map(params![category, year, limit as i64], |row| {
+            Ok(DashboardListItem {
+                label: row.get(0)?,
+                total_amount: row.get(1)?,
             })
         })?;
 
@@ -532,4 +578,12 @@ impl Database {
         )?;
         Ok(())
     }
+}
+
+fn parse_tags_json(raw: String) -> Vec<String> {
+    serde_json::from_str::<Vec<String>>(&raw).unwrap_or_default()
+}
+
+fn tags_to_json(tags: &[String]) -> String {
+    serde_json::to_string(tags).unwrap_or_else(|_| "[]".to_string())
 }

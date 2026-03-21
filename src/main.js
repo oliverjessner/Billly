@@ -17,7 +17,6 @@ const state = Object.seal({
     selectedInvoiceId: null,
     charts: {
         monthly: null,
-        profit: null,
     },
 });
 const $ = selector => document.querySelector(selector);
@@ -59,6 +58,7 @@ const MONTH_NAMES = [
     'November',
     'December',
 ];
+const PAYABLE_TAG_OPTIONS = ['SaaS', 'Insurance', 'Membership', 'Marketing', 'Domain', 'Rent'];
 
 function monthNameFromValue(value) {
     if (!value) return 'Month';
@@ -78,65 +78,20 @@ async function loadDashboard() {
     const yearMonth = year && month ? `${year}-${month}` : null;
     const stats = await invoke('get_dashboard_stats', { yearMonth });
     const yearLabel = year || String(new Date().getFullYear());
-    const monthText = monthNameFromValue(month);
     renderKpis(stats, yearLabel, month);
-    renderRecent('#recent-revenue', stats.recent_revenue);
-    renderRecent('#recent-payables', stats.recent_payables);
-    const openPayablesEl = $('#open-payables');
-    if (openPayablesEl) {
-        openPayablesEl.textContent = formatCurrency(stats.open_payables);
-        openPayablesEl.classList.remove('positive', 'negative');
-        if (stats.open_payables > 0) {
-            openPayablesEl.classList.add('negative');
-        }
+    renderMetricValue('#overdue-revenue', stats.overdue_revenue, { absolute: false, negativeWhenPositive: true });
+    renderMetricValue('#overdue-payables', stats.overdue_payables, { absolute: true, negativeWhenPositive: true });
+    renderDashboardInvoiceList('#open-revenue-list', stats.open_revenue_items, 'No open revenue');
+    renderDashboardInvoiceList('#open-payables-list', stats.open_payables_items, 'No open payables');
+    renderAggregateList('#best-customer-list', stats.best_customers, 'No revenue data');
+    renderAggregateList('#highest-cost-list', stats.highest_costs, 'No payables data', { absolute: true });
+    const bestCustomerTitle = $('#best-customer-title');
+    if (bestCustomerTitle) {
+        bestCustomerTitle.textContent = `Best Customer (${yearLabel})`;
     }
-    const payablesPanelTitle = $('#payables-panel-title');
-    if (payablesPanelTitle) {
-        payablesPanelTitle.textContent = `Payables (${monthText})`;
-    }
-    const openPayablesLabel = $('#open-payables-label');
-    if (openPayablesLabel) {
-        openPayablesLabel.textContent = 'Open Payables';
-    }
-    const paidPayablesEl = $('#paid-payables-month');
-    if (paidPayablesEl) {
-        paidPayablesEl.textContent = formatCurrency(Math.abs(stats.paid_payables_month));
-        paidPayablesEl.classList.remove('positive', 'negative');
-        if (stats.paid_payables_month > 0) {
-            paidPayablesEl.classList.add('negative');
-        }
-    }
-    const paidPayablesLabel = $('#paid-payables-label');
-    if (paidPayablesLabel) {
-        paidPayablesLabel.textContent = 'Paid Payables';
-    }
-    const revenuePanelTitle = $('#revenue-panel-title');
-    if (revenuePanelTitle) {
-        revenuePanelTitle.textContent = `Revenue (${monthText})`;
-    }
-    const openRevenueLabel = $('#open-revenue-label');
-    if (openRevenueLabel) {
-        openRevenueLabel.textContent = 'Open Revenue';
-    }
-    const openRevenueEl = $('#open-revenue');
-    if (openRevenueEl) {
-        openRevenueEl.textContent = formatCurrency(stats.open_revenue);
-        openRevenueEl.classList.remove('positive', 'negative');
-        if (stats.open_revenue > 0) {
-            openRevenueEl.classList.add('negative');
-        }
-    }
-    const paidRevenueLabel = $('#paid-revenue-label');
-    if (paidRevenueLabel) {
-        paidRevenueLabel.textContent = 'Paid Revenue';
-    }
-    const paidRevenueEl = $('#paid-revenue-month');
-    if (paidRevenueEl) {
-        paidRevenueEl.textContent = formatCurrency(stats.paid_revenue_month);
-        paidRevenueEl.classList.remove('positive', 'negative');
-        if (stats.paid_revenue_month > 0) {
-            paidRevenueEl.classList.add('positive');
-        }
+    const highestCostTitle = $('#highest-cost-title');
+    if (highestCostTitle) {
+        highestCostTitle.textContent = `Highest Cost (${yearLabel})`;
     }
     renderCharts(stats);
 }
@@ -203,18 +158,53 @@ function renderKpis(stats, yearLabel, monthLabel) {
     });
 }
 
-function renderRecent(selector, items) {
+function renderDashboardInvoiceList(selector, items, emptyText = 'No data') {
     const list = $(selector);
     list.innerHTML = '';
     if (!items.length) {
-        list.innerHTML = '<li class="muted">No data</li>';
+        list.innerHTML = `<li class="muted">${emptyText}</li>`;
         return;
     }
     items.forEach(item => {
         const li = document.createElement('li');
-        li.innerHTML = `<span>${item.counterparty_name || 'Unknown'}</span><span>${formatCurrency(item.total_amount)}</span>`;
+        const name = document.createElement('span');
+        name.textContent = item.counterparty_name || 'Unknown';
+        const amount = document.createElement('span');
+        amount.textContent = formatCurrency(item.total_amount);
+        li.append(name, amount);
         list.appendChild(li);
     });
+}
+
+function renderAggregateList(selector, items, emptyText = 'No data', { absolute = false } = {}) {
+    const list = $(selector);
+    list.innerHTML = '';
+    if (!items.length) {
+        list.innerHTML = `<li class="muted">${emptyText}</li>`;
+        return;
+    }
+    items.forEach(item => {
+        const li = document.createElement('li');
+        const label = document.createElement('span');
+        label.textContent = item.label || 'Unknown';
+        const amount = document.createElement('span');
+        amount.textContent = formatCurrency(absolute ? Math.abs(item.total_amount) : item.total_amount);
+        li.append(label, amount);
+        list.appendChild(li);
+    });
+}
+
+function renderMetricValue(selector, value, { absolute = false, negativeWhenPositive = false } = {}) {
+    const element = $(selector);
+    if (!element) return;
+    const amount = absolute ? Math.abs(value) : value;
+    element.textContent = formatCurrency(amount);
+    element.classList.remove('positive', 'negative');
+    if (negativeWhenPositive && amount > 0) {
+        element.classList.add('negative');
+    } else if (amount > 0) {
+        element.classList.add('positive');
+    }
 }
 
 function renderCharts(stats) {
@@ -246,6 +236,7 @@ function renderCharts(stats) {
             },
             options: {
                 responsive: true,
+                maintainAspectRatio: false,
                 plugins: {
                     legend: { labels: { color: '#f3f4f6' }, onClick: () => {} },
                 },
@@ -260,36 +251,6 @@ function renderCharts(stats) {
         state.charts.monthly.data.datasets[0].data = stats.chart_revenue;
         state.charts.monthly.data.datasets[1].data = stats.chart_payables;
         state.charts.monthly.update();
-    }
-
-    if (!state.charts.profit) {
-        state.charts.profit = new Chart($('#chart-profit'), {
-            type: 'bar',
-            data: {
-                labels: stats.chart_months,
-                datasets: [
-                    {
-                        label: 'Profit',
-                        data: stats.chart_profit,
-                        backgroundColor: 'rgba(217,70,239,0.6)',
-                    },
-                ],
-            },
-            options: {
-                responsive: true,
-                plugins: {
-                    legend: { labels: { color: '#f3f4f6' }, onClick: () => {} },
-                },
-                scales: {
-                    x: { ticks: { color: '#9aa3b2' }, grid: { color: 'rgba(255,255,255,0.05)' } },
-                    y: { ticks: { color: '#9aa3b2' }, grid: { color: 'rgba(255,255,255,0.05)' } },
-                },
-            },
-        });
-    } else {
-        state.charts.profit.data.labels = stats.chart_months;
-        state.charts.profit.data.datasets[0].data = stats.chart_profit;
-        state.charts.profit.update();
     }
 }
 
@@ -329,6 +290,40 @@ async function loadInvoiceYears() {
         select.value = 'all';
     }
     state.invoiceYear = select.value;
+}
+
+async function loadDashboardYears() {
+    const select = $('#year-select');
+    if (!select) return;
+
+    const [revenueYears, payableYears] = await Promise.all([
+        invoke('get_invoice_years', { category: 'revenue' }),
+        invoke('get_invoice_years', { category: 'payable' }),
+    ]);
+
+    const years = Array.from(new Set([...revenueYears, ...payableYears]))
+        .filter(Boolean)
+        .sort((a, b) => Number.parseInt(b, 10) - Number.parseInt(a, 10));
+
+    const currentYear = String(new Date().getFullYear());
+    const previous = select.value;
+    const yearOptions = years.length ? years : [currentYear];
+
+    select.innerHTML = '';
+    yearOptions.forEach(year => {
+        const option = document.createElement('option');
+        option.value = year;
+        option.textContent = year;
+        select.appendChild(option);
+    });
+
+    if (yearOptions.includes(previous)) {
+        select.value = previous;
+    } else if (yearOptions.includes(currentYear)) {
+        select.value = currentYear;
+    } else {
+        select.value = yearOptions[0];
+    }
 }
 
 function renderInvoiceList(items) {
@@ -400,6 +395,7 @@ function renderInvoiceDetail(detail) {
         ['tax_amount', 'Tax'],
         ['net_amount', 'Net Amount'],
         ['paid_at', 'Paid At'],
+        ['document_language', 'Language', true],
         ['confidence_score', 'Confidence Score', true],
     ];
 
@@ -445,6 +441,10 @@ function renderInvoiceDetail(detail) {
         });
     });
 
+    if (invoice.category === 'payable') {
+        container.appendChild(createPayableTagsRow(invoice));
+    }
+
     const ocrBlock = document.createElement('div');
     ocrBlock.className = 'detail-block';
     ocrBlock.innerHTML = `
@@ -480,6 +480,68 @@ function renderInvoiceDetail(detail) {
     });
 }
 
+function createPayableTagsRow(invoice) {
+    const row = document.createElement('div');
+    row.className = 'detail-row detail-row-tags';
+
+    const label = document.createElement('span');
+    label.textContent = 'Tags';
+
+    const editor = document.createElement('div');
+    editor.className = 'detail-value detail-tags-editor';
+
+    const activeTags = Array.isArray(invoice.tags) ? invoice.tags : [];
+    const activeList = document.createElement('div');
+    activeList.className = 'tag-list';
+
+    if (activeTags.length) {
+        activeTags.forEach(tag => {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'tag-chip is-active';
+            button.textContent = `${tag} ×`;
+            button.addEventListener('click', async () => {
+                await saveInvoiceTags(invoice.id, activeTags.filter(value => value !== tag));
+            });
+            activeList.appendChild(button);
+        });
+    } else {
+        const empty = document.createElement('span');
+        empty.className = 'muted';
+        empty.textContent = 'No tags';
+        activeList.appendChild(empty);
+    }
+
+    const availableList = document.createElement('div');
+    availableList.className = 'tag-list tag-list-available';
+    PAYABLE_TAG_OPTIONS.filter(tag => !activeTags.includes(tag)).forEach(tag => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'tag-chip is-add';
+        button.textContent = `+ ${tag}`;
+        button.addEventListener('click', async () => {
+            await saveInvoiceTags(invoice.id, [...activeTags, tag]);
+        });
+        availableList.appendChild(button);
+    });
+
+    editor.append(activeList, availableList);
+    row.append(label, editor);
+    return row;
+}
+
+async function saveInvoiceTags(invoiceId, tags) {
+    await invoke('update_invoice_tags', {
+        payload: {
+            invoiceId,
+            tags,
+        },
+    });
+    await selectInvoice(invoiceId);
+    await loadInvoices();
+    await loadDashboard();
+}
+
 function renderInvoicePlaceholder() {
     const container = $('#detail-body');
     container.innerHTML = `<p class="muted">Select an invoice from the list.</p>`;
@@ -491,7 +553,6 @@ async function loadSettings() {
     $('#payable-folder').value = settings.payable_folder || '';
     const openAiInput = $('#openai-key');
     openAiInput.value = '';
-    $('#ocr-language').value = settings.ocr_language || 'deu';
     const savedKeyInput = $('#openai-key-saved');
     const removeButton = $('#remove-openai-key');
     if (settings.openai_api_key_present) {
@@ -513,7 +574,6 @@ async function saveSettings() {
         revenueFolder: $('#revenue-folder').value || null,
         payableFolder: $('#payable-folder').value || null,
         openaiApiKey: $('#openai-key').value || null,
-        ocrLanguage: $('#ocr-language').value,
     };
     await invoke('save_settings', { payload });
     await loadSettings();
@@ -525,15 +585,6 @@ async function init() {
     const now = new Date();
     const yearSelect = $('#year-select');
     const monthSelect = $('#month-select');
-
-    const currentYear = now.getFullYear();
-    for (let y = currentYear - 5; y <= currentYear + 1; y += 1) {
-        const option = document.createElement('option');
-        option.value = String(y);
-        option.textContent = String(y);
-        yearSelect.appendChild(option);
-    }
-    yearSelect.value = String(currentYear);
 
     const months = ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12'];
     months.forEach((value, index) => {
@@ -607,11 +658,6 @@ async function init() {
         setStatus('OpenAI key removed', true);
     });
 
-    $('#reprocess-all').addEventListener('click', async () => {
-        await invoke('reprocess_all');
-        setStatus('Reprocessing started', true);
-    });
-
     $('#reprocess-single').addEventListener('click', async () => {
         if (!state.selectedInvoiceId) return;
         await invoke('reprocess_invoice', { invoiceId: state.selectedInvoiceId });
@@ -635,6 +681,7 @@ async function init() {
             await invoke('delete_invoice', { invoiceId: state.selectedInvoiceId });
             state.selectedInvoiceId = null;
             renderInvoicePlaceholder();
+            await loadDashboardYears();
             await loadDashboard();
             await loadInvoiceYears();
             await loadInvoices();
@@ -646,11 +693,13 @@ async function init() {
     });
 
     await loadSettings();
+    await loadDashboardYears();
     await loadDashboard();
     await loadInvoiceYears();
     await loadInvoices();
 
     await listen('invoice-updated', async event => {
+        await loadDashboardYears();
         await loadDashboard();
         await loadInvoiceYears();
         await loadInvoices();

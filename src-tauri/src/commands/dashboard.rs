@@ -11,6 +11,7 @@ pub async fn get_dashboard_stats(
     let now = Local::now();
     let current_year_month = year_month.unwrap_or_else(|| format!("{}-{:02}", now.year(), now.month()));
     let current_year = &current_year_month[0..4];
+    let today = now.date_naive().format("%Y-%m-%d").to_string();
 
     let db = state.db.lock().map_err(|_| "DB lock".to_string())?;
 
@@ -20,30 +21,29 @@ pub async fn get_dashboard_stats(
     let payable_month = db
         .get_monthly_sum("payable", &current_year_month)
         .map_err(|e| e.to_string())?;
-    let paid_payables_month = db
-        .get_paid_payables_month_total(&current_year_month)
-        .map_err(|e| e.to_string())?;
     let revenue_year = db
         .get_yearly_sum("revenue", current_year)
         .map_err(|e| e.to_string())?;
     let payable_year = db
         .get_yearly_sum("payable", current_year)
         .map_err(|e| e.to_string())?;
-    let open_payables = db
-        .get_open_payables_month_total(&current_year_month)
+    let overdue_revenue = db
+        .get_overdue_total("revenue", &today)
         .map_err(|e| e.to_string())?;
-    let open_revenue = db
-        .get_status_total_for_month("revenue", "open", &current_year_month)
+    let overdue_payables = db
+        .get_overdue_total("payable", &today)
         .map_err(|e| e.to_string())?;
-    let paid_revenue_month = db
-        .get_status_total_for_month("revenue", "paid", &current_year_month)
+    let open_revenue_items = db
+        .get_invoice_summaries_by_status("revenue", "open")
         .map_err(|e| e.to_string())?;
-
-    let recent_revenue = db
-        .get_recent_invoices("revenue", 5)
+    let open_payables_items = db
+        .get_invoice_summaries_by_status("payable", "open")
         .map_err(|e| e.to_string())?;
-    let recent_payables = db
-        .get_recent_invoices("payable", 5)
+    let best_customers = db
+        .get_top_counterparties_by_year("revenue", current_year, 5)
+        .map_err(|e| e.to_string())?;
+    let highest_costs = db
+        .get_top_counterparties_by_year("payable", current_year, 5)
         .map_err(|e| e.to_string())?;
 
     let (chart_months, chart_revenue, chart_payables, chart_profit) = build_chart_series(&*db, &current_year_month)?;
@@ -53,14 +53,14 @@ pub async fn get_dashboard_stats(
         revenue_year,
         payable_month,
         payable_year,
-        paid_payables_month,
         profit_month: revenue_month - payable_month,
         profit_year: revenue_year - payable_year,
-        open_payables,
-        open_revenue,
-        paid_revenue_month,
-        recent_revenue,
-        recent_payables,
+        overdue_revenue,
+        overdue_payables,
+        open_revenue_items,
+        open_payables_items,
+        best_customers,
+        highest_costs,
         chart_months,
         chart_revenue,
         chart_payables,

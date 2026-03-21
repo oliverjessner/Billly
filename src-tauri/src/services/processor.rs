@@ -16,6 +16,7 @@ pub async fn process_invoice(
     path: &Path,
     category: &str,
     settings: &Settings,
+    force: bool,
 ) -> Result<Invoice> {
     let file_path = path.to_string_lossy().to_string();
     let file_hash = sha256_file(path)?;
@@ -26,13 +27,15 @@ pub async fn process_invoice(
         db.get_invoice_by_path(&file_path)?
     };
 
-    if let Some(existing) = &existing {
-        if existing.file_hash == file_hash && existing.file_modified_at == file_modified_at {
-            return Ok(existing.clone());
+    if !force {
+        if let Some(existing) = &existing {
+            if existing.file_hash == file_hash && existing.file_modified_at == file_modified_at {
+                return Ok(existing.clone());
+            }
         }
     }
 
-    if existing.is_none() {
+    if existing.is_none() && !force {
         let by_hash = {
             let db = db.lock().map_err(|_| anyhow!("DB lock poisoned"))?;
             db.get_invoice_by_hash(&file_hash)?
@@ -73,6 +76,8 @@ pub async fn process_invoice(
         net_amount: None,
         status: "open".to_string(),
         paid_at: None,
+        document_language: None,
+        tags: Vec::new(),
         created_at: now.clone(),
         updated_at: now.clone(),
     });
@@ -88,8 +93,9 @@ pub async fn process_invoice(
         db.upsert_invoice(&invoice)?;
     }
 
-    let text = TextExtractor::extract_from_pdf(path, &settings.ocr_language)?;
-    invoice.ocr_text = Some(text.clone());
+    let extracted = TextExtractor::extract_from_pdf(path)?;
+    invoice.ocr_text = Some(extracted.text.clone());
+    invoice.document_language = extracted.document_language;
 
     let api_key = settings
         .openai_api_key
@@ -101,7 +107,7 @@ pub async fn process_invoice(
         return Err(anyhow!("OpenAI API key is empty or invalid"));
     }
 
-    let (data, raw_json) = OpenAIExtractor::extract_invoice_data(&normalized_key, &text).await?;
+    let (data, raw_json) = OpenAIExtractor::extract_invoice_data(&normalized_key, invoice.ocr_text.as_deref().unwrap_or_default(), category).await?;
     apply_extracted(&mut invoice, data, raw_json);
     invoice.ingestion_status = "processed".to_string();
     invoice.updated_at = now_rfc3339();
@@ -157,5 +163,8 @@ fn apply_extracted(invoice: &mut Invoice, data: ExtractedInvoiceData, raw_json: 
         .net_amount
         .map(|value| if invoice.category == "payable" { value.abs() } else { value })
         .map(format_decimal);
+    if invoice.category == "payable" && invoice.tags.is_empty() {
+        invoice.tags = data.tags.unwrap_or_default();
+    }
     invoice.confidence_score = data.confidence_score.unwrap_or(0.5);
 }

@@ -39,51 +39,42 @@
 
           <div class="kpi-grid" id="kpi-grid"></div>
 
-          <div class="panel-grid">
-            <div class="panel">
+          <div class="dashboard-top-grid">
+            <div class="panel panel-span-3">
               <h3>Monthly Trend</h3>
-              <canvas id="chart-monthly"></canvas>
+              <canvas id="chart-monthly" class="dashboard-chart"></canvas>
             </div>
             <div class="panel">
-              <h3>Profit Trend</h3>
-              <canvas id="chart-profit"></canvas>
+              <h3>Overdue</h3>
+              <div class="panel-metrics">
+                <div class="panel-metric">
+                  <span class="metric-label">Overdue Revenue</span>
+                  <span class="metric-value negative" id="overdue-revenue"></span>
+                </div>
+                <div class="panel-metric">
+                  <span class="metric-label">Overdue Payables</span>
+                  <span class="metric-value negative" id="overdue-payables"></span>
+                </div>
+              </div>
             </div>
           </div>
 
           <div class="panel-grid">
             <div class="panel">
-              <h3>Latest Revenue</h3>
-              <ul class="list" id="recent-revenue"></ul>
+              <h3>Open Revenue</h3>
+              <ul class="list dashboard-list" id="open-revenue-list"></ul>
             </div>
             <div class="panel">
-              <h3>Latest Payables</h3>
-              <ul class="list" id="recent-payables"></ul>
+              <h3>Open Payables</h3>
+              <ul class="list dashboard-list" id="open-payables-list"></ul>
             </div>
             <div class="panel">
-              <h3 id="payables-panel-title">Payables</h3>
-              <div class="panel-metrics">
-                <div class="panel-metric">
-                  <span class="metric-label" id="open-payables-label">Open Payables</span>
-                  <span class="metric-value open-payables" id="open-payables"></span>
-                </div>
-                <div class="panel-metric">
-                  <span class="metric-label" id="paid-payables-label">Paid Payables</span>
-                  <span class="metric-value paid-payables" id="paid-payables-month"></span>
-                </div>
-              </div>
+              <h3 id="best-customer-title">Best Customer</h3>
+              <ul class="list dashboard-list" id="best-customer-list"></ul>
             </div>
             <div class="panel">
-              <h3 id="revenue-panel-title">Revenue</h3>
-              <div class="panel-metrics">
-                <div class="panel-metric">
-                  <span class="metric-label" id="open-revenue-label">Open Revenue</span>
-                  <span class="metric-value open-revenue" id="open-revenue"></span>
-                </div>
-                <div class="panel-metric">
-                  <span class="metric-label" id="paid-revenue-label">Paid Revenue</span>
-                  <span class="metric-value paid-revenue" id="paid-revenue-month"></span>
-                </div>
-              </div>
+              <h3 id="highest-cost-title">Highest Cost</h3>
+              <ul class="list dashboard-list" id="highest-cost-list"></ul>
             </div>
           </div>
         </section>
@@ -153,13 +144,6 @@
                     <button class="ghost" id="pick-payable-folder">Select</button>
                   </div>
                 </div>
-                <div class="field">
-                  <label>OCR Language</label>
-                  <select id="ocr-language">
-                    <option value="deu">German</option>
-                    <option value="eng">English</option>
-                  </select>
-                </div>
               </div>
               <div class="form-row">
                 <div class="field">
@@ -178,7 +162,6 @@
             <div class="actions">
               <button class="primary" id="save-settings">Save</button>
               <button class="ghost" id="test-openai">Test Key</button>
-              <button class="ghost" id="reprocess-all">Reprocess all PDFs</button>
             </div>
           </div>
         </section>

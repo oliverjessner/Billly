@@ -1,6 +1,7 @@
-use crate::models::{InvoiceDetail, InvoiceOverride, InvoiceSummary};
+use crate::models::{normalize_payable_tags, InvoiceDetail, InvoiceOverride, InvoiceSummary};
 use crate::services::processor::process_invoice;
 use crate::services::state::AppState;
+use chrono::Local;
 use serde::Deserialize;
 use tauri::State;
 
@@ -10,6 +11,13 @@ pub struct UpdateInvoicePayload {
     pub invoice_id: String,
     pub field_name: String,
     pub value: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateInvoiceTagsPayload {
+    pub invoice_id: String,
+    pub tags: Vec<String>,
 }
 
 #[tauri::command]
@@ -54,6 +62,36 @@ pub async fn get_invoice_detail(invoice_id: String, state: State<'_, AppState>) 
 pub async fn update_invoice_field(payload: UpdateInvoicePayload, state: State<'_, AppState>) -> Result<(), String> {
     let db = state.db.lock().map_err(|_| "DB lock".to_string())?;
     db.set_override(&payload.invoice_id, &payload.field_name, &payload.value)
+        .map_err(|e| e.to_string())?;
+
+    if payload.field_name == "status" {
+        if payload.value == "paid" {
+            let today = Local::now().date_naive().format("%Y-%m-%d").to_string();
+            db.set_override(&payload.invoice_id, "paid_at", &today)
+                .map_err(|e| e.to_string())?;
+        } else if payload.value == "open" {
+            db.clear_override(&payload.invoice_id, "paid_at")
+                .map_err(|e| e.to_string())?;
+        }
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn update_invoice_tags(payload: UpdateInvoiceTagsPayload, state: State<'_, AppState>) -> Result<(), String> {
+    let db = state.db.lock().map_err(|_| "DB lock".to_string())?;
+    let invoice = db
+        .get_invoice_by_id(&payload.invoice_id)
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| "Invoice not found".to_string())?;
+
+    if invoice.category != "payable" {
+        return Err("Tags are only supported for payables".to_string());
+    }
+
+    let tags = normalize_payable_tags(payload.tags);
+    db.set_invoice_tags(&payload.invoice_id, &tags)
         .map_err(|e| e.to_string())?;
     Ok(())
 }
@@ -100,7 +138,7 @@ pub async fn reprocess_invoice(invoice_id: String, state: State<'_, AppState>) -
         .map_err(|_| "Settings lock".to_string())?
         .clone();
 
-    process_invoice(&state.db, std::path::Path::new(&path), &invoice.category, &settings)
+    process_invoice(&state.db, std::path::Path::new(&path), &invoice.category, &settings, true)
         .await
         .map_err(|e| e.to_string())?;
     Ok(())

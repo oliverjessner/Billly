@@ -1,5 +1,15 @@
 use serde::{Deserialize, Serialize};
 
+pub const PAYABLE_TAG_OPTIONS: [&str; 7] = ["Device", "SaaS", "Insurance", "Membership", "Marketing", "Domain", "Rent"];
+
+pub fn normalize_payable_tags(tags: Vec<String>) -> Vec<String> {
+    PAYABLE_TAG_OPTIONS
+        .iter()
+        .filter(|option| tags.iter().any(|tag| tag.eq_ignore_ascii_case(option)))
+        .map(|option| option.to_string())
+        .collect()
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Invoice {
     pub id: String,
@@ -21,6 +31,8 @@ pub struct Invoice {
     pub net_amount: Option<String>,
     pub status: String,
     pub paid_at: Option<String>,
+    pub document_language: Option<String>,
+    pub tags: Vec<String>,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -57,16 +69,20 @@ pub struct Settings {
     pub revenue_folder: Option<String>,
     pub payable_folder: Option<String>,
     pub openai_api_key: Option<String>,
-    pub ocr_language: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SettingsPublic {
     pub revenue_folder: Option<String>,
     pub payable_folder: Option<String>,
-    pub ocr_language: String,
     pub openai_api_key_present: bool,
     pub openai_api_key_last4: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DashboardListItem {
+    pub label: String,
+    pub total_amount: f64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -75,14 +91,14 @@ pub struct DashboardStats {
     pub revenue_year: f64,
     pub payable_month: f64,
     pub payable_year: f64,
-    pub paid_payables_month: f64,
     pub profit_month: f64,
     pub profit_year: f64,
-    pub open_payables: f64,
-    pub open_revenue: f64,
-    pub paid_revenue_month: f64,
-    pub recent_revenue: Vec<InvoiceSummary>,
-    pub recent_payables: Vec<InvoiceSummary>,
+    pub overdue_revenue: f64,
+    pub overdue_payables: f64,
+    pub open_revenue_items: Vec<InvoiceSummary>,
+    pub open_payables_items: Vec<InvoiceSummary>,
+    pub best_customers: Vec<DashboardListItem>,
+    pub highest_costs: Vec<DashboardListItem>,
     pub chart_months: Vec<String>,
     pub chart_revenue: Vec<f64>,
     pub chart_payables: Vec<f64>,
@@ -99,6 +115,7 @@ pub struct ExtractedInvoiceData {
     pub currency: Option<String>,
     pub tax_amount: Option<f64>,
     pub net_amount: Option<f64>,
+    pub tags: Option<Vec<String>>,
     pub extraction_notes: String,
     pub confidence_score: Option<f64>,
 }

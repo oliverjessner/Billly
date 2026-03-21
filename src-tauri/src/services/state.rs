@@ -93,7 +93,7 @@ impl AppState {
                         return;
                     }
                 };
-                match process_invoice(&db, &path, &category, &settings).await {
+                match process_invoice(&db, &path, &category, &settings, false).await {
                     Ok(invoice) => {
                         let _ = app_handle.emit("invoice-updated", invoice);
                     }
@@ -147,7 +147,7 @@ fn handle_event(event: FileEvent, db: &Arc<Mutex<Database>>, settings: &Arc<Mute
                         return;
                     }
                 };
-                match process_invoice(&db, &path, &category, &settings).await {
+                match process_invoice(&db, &path, &category, &settings, false).await {
                     Ok(invoice) => {
                         let _ = app_handle.emit("invoice-updated", invoice);
                     }
