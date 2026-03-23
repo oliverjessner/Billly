@@ -97,7 +97,16 @@ fn main() {
             commands::settings::test_openai_key_saved,
             commands::settings::pick_folder,
             commands::settings::remove_openai_key,
+            commands::settings::connect_google_account,
+            commands::settings::remove_google_account,
+            commands::settings::test_gmail_connection,
             commands::dashboard::get_dashboard_stats,
+            commands::customers::get_customers,
+            commands::customers::get_customer_detail,
+            commands::customers::update_customer_field,
+            commands::customers::add_customer_contact,
+            commands::customers::update_customer_contact_field,
+            commands::customers::delete_customer_contact,
             commands::invoices::get_invoices,
             commands::invoices::get_invoice_years,
             commands::invoices::get_invoice_detail,
@@ -116,6 +125,9 @@ fn main() {
 fn load_settings(db: &db::Database) -> Settings {
     let revenue_folder = db.get_setting("revenue_folder").ok().flatten();
     let payable_folder = db.get_setting("payable_folder").ok().flatten();
+    let company_name = db.get_setting("company_name").ok().flatten();
+    let company_email = db.get_setting("company_email").ok().flatten();
+    let company_address = db.get_setting("company_address").ok().flatten();
     let mut openai_api_key = db.get_setting("openai_api_key").ok().flatten();
     if matches!(openai_api_key.as_deref(), Some(value) if value.starts_with("keychain:")) {
         let _ = db.delete_setting("openai_api_key");
@@ -124,6 +136,9 @@ fn load_settings(db: &db::Database) -> Settings {
     Settings {
         revenue_folder,
         payable_folder,
+        company_name,
+        company_email,
+        company_address,
         openai_api_key,
     }
 }

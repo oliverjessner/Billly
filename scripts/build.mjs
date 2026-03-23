@@ -29,6 +29,7 @@ async function build() {
   await cleanDir(dist);
   await fs.copyFile(path.join(root, "index.html"), path.join(dist, "index.html"));
   await fs.copyFile(path.join(root, "about.html"), path.join(dist, "about.html"));
+  await fs.copyFile(path.join(root, "package.json"), path.join(dist, "package.json"));
   await copyDir(path.join(root, "src"), path.join(dist, "src"));
   await copyDir(path.join(root, "public"), path.join(dist, "public"));
 }

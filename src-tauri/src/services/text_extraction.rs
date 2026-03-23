@@ -58,10 +58,6 @@ impl TextExtractor {
 
         Err(last_error.unwrap_or_else(|| anyhow!("OCR failed")))
     }
-
-    pub fn validate_text_quality(text: &str) -> bool {
-        text.len() > 50 && text.split_whitespace().count() > 10
-    }
 }
 
 fn detect_language(text: &str) -> Option<String> {

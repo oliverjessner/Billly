@@ -8,7 +8,8 @@ use crate::services::crypto::CryptoService;
 use crate::services::openai::OpenAIExtractor;
 use crate::services::text_extraction::TextExtractor;
 use crate::utils::{
-    format_decimal, modified_time_rfc3339, normalize_api_key, normalize_date, now_rfc3339, sha256_file,
+    format_decimal, modified_time_rfc3339, normalize_api_key, normalize_date, now_rfc3339, redact_profile_data,
+    sha256_file,
 };
 
 pub async fn process_invoice(
@@ -94,7 +95,13 @@ pub async fn process_invoice(
     }
 
     let extracted = TextExtractor::extract_from_pdf(path)?;
-    invoice.ocr_text = Some(extracted.text.clone());
+    let sanitized_text = redact_profile_data(
+        &extracted.text,
+        settings.company_name.as_deref(),
+        settings.company_email.as_deref(),
+        settings.company_address.as_deref(),
+    );
+    invoice.ocr_text = Some(sanitized_text.clone());
     invoice.document_language = extracted.document_language;
 
     let api_key = settings
@@ -107,7 +114,8 @@ pub async fn process_invoice(
         return Err(anyhow!("OpenAI API key is empty or invalid"));
     }
 
-    let (data, raw_json) = OpenAIExtractor::extract_invoice_data(&normalized_key, invoice.ocr_text.as_deref().unwrap_or_default(), category).await?;
+    let (data, raw_json) =
+        OpenAIExtractor::extract_invoice_data(&normalized_key, &sanitized_text, category).await?;
     apply_extracted(&mut invoice, data, raw_json);
     invoice.ingestion_status = "processed".to_string();
     invoice.updated_at = now_rfc3339();

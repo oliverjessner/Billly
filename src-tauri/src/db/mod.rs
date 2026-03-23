@@ -1,22 +1,22 @@
 use rusqlite::{params, Connection, OptionalExtension, Result as SqlResult};
 use serde_json;
 use std::path::PathBuf;
+use uuid::Uuid;
 
-use crate::models::{DashboardListItem, Invoice, InvoiceOverride, InvoiceSummary};
+use crate::models::{
+    Customer, CustomerContact, CustomerSourceInvoice, CustomerSummary, DashboardListItem, Invoice, InvoiceOverride,
+    InvoiceSummary,
+};
+use crate::utils::now_rfc3339;
 
 pub struct Database {
     conn: Connection,
 }
 
-const BASELINE_MIGRATION_NAME: &str = "001_init_schema.sql";
-const LEGACY_MIGRATION_NAMES: &[&str] = &[
-    "001_create_invoices.sql",
-    "002_create_overrides_and_settings.sql",
-    "003_create_processing_logs_table.sql",
-    "004_normalize_payables.sql",
-    "005_add_invoice_tags.sql",
-    "006_add_document_language.sql",
-];
+const MIGRATIONS: &[(&str, &str)] = &[(
+    "001_init_schema.sql",
+    include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/../migrations/001_init_schema.sql")),
+)];
 
 impl Database {
     pub fn new(db_path: PathBuf) -> SqlResult<Self> {
@@ -35,25 +35,18 @@ impl Database {
             );",
         )?;
 
-        if self.is_migration_applied(BASELINE_MIGRATION_NAME)? {
-            return Ok(());
+        for (name, sql) in MIGRATIONS {
+            if self.is_migration_applied(name)? {
+                continue;
+            }
+            let tx = self.conn.transaction()?;
+            tx.execute_batch(sql)?;
+            tx.execute(
+                "INSERT INTO schema_migrations (name, applied_at) VALUES (?1, datetime('now'))",
+                params![name],
+            )?;
+            tx.commit()?;
         }
-
-        if self.has_applied_legacy_migrations()? {
-            self.mark_migration_applied(BASELINE_MIGRATION_NAME)?;
-            return Ok(());
-        }
-
-        let tx = self.conn.transaction()?;
-        tx.execute_batch(include_str!(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/../migrations/001_init_schema.sql"
-        )))?;
-        tx.execute(
-            "INSERT INTO schema_migrations (name, applied_at) VALUES (?1, datetime('now'))",
-            params![BASELINE_MIGRATION_NAME],
-        )?;
-        tx.commit()?;
 
         Ok(())
     }
@@ -68,29 +61,6 @@ impl Database {
             )
             .optional()?;
         Ok(applied.is_some())
-    }
-
-    fn has_applied_legacy_migrations(&self) -> SqlResult<bool> {
-        let placeholders = LEGACY_MIGRATION_NAMES
-            .iter()
-            .map(|_| "?")
-            .collect::<Vec<_>>()
-            .join(", ");
-        let sql = format!(
-            "SELECT 1 FROM schema_migrations WHERE name IN ({}) LIMIT 1",
-            placeholders
-        );
-        let mut stmt = self.conn.prepare(&sql)?;
-        let mut rows = stmt.query(rusqlite::params_from_iter(LEGACY_MIGRATION_NAMES.iter().copied()))?;
-        Ok(rows.next()?.is_some())
-    }
-
-    fn mark_migration_applied(&self, name: &str) -> SqlResult<()> {
-        self.conn.execute(
-            "INSERT OR IGNORE INTO schema_migrations (name, applied_at) VALUES (?1, datetime('now'))",
-            params![name],
-        )?;
-        Ok(())
     }
 
     pub fn upsert_invoice(&self, invoice: &Invoice) -> SqlResult<()> {
@@ -250,55 +220,13 @@ impl Database {
         .optional()
     }
 
-    pub fn get_invoices(&self, category: &str) -> SqlResult<Vec<Invoice>> {
-        let mut stmt = self.conn.prepare(
-            "SELECT id, category, file_path, file_hash, file_modified_at, ingestion_status,
-                    ocr_text, extracted_json, confidence_score, invoice_number, invoice_date,
-                    due_date, counterparty_name, total_amount, currency, tax_amount, net_amount,
-                    status, paid_at, document_language, tags, created_at, updated_at
-             FROM invoices
-             WHERE category = ?1
-             ORDER BY invoice_date DESC",
-        )?;
-
-        let rows = stmt.query_map(params![category], |row| {
-            Ok(Invoice {
-                id: row.get(0)?,
-                category: row.get(1)?,
-                file_path: row.get(2)?,
-                file_hash: row.get(3)?,
-                file_modified_at: row.get(4)?,
-                ingestion_status: row.get(5)?,
-                ocr_text: row.get(6)?,
-                extracted_json: row.get(7)?,
-                confidence_score: row.get(8)?,
-                invoice_number: row.get(9)?,
-                invoice_date: row.get(10)?,
-                due_date: row.get(11)?,
-                counterparty_name: row.get(12)?,
-                total_amount: row.get(13)?,
-                currency: row.get(14)?,
-                tax_amount: row.get(15)?,
-                net_amount: row.get(16)?,
-                status: row.get(17)?,
-                paid_at: row.get(18)?,
-                document_language: row.get(19)?,
-                tags: parse_tags_json(row.get::<_, String>(20)?),
-                created_at: row.get(21)?,
-                updated_at: row.get(22)?,
-            })
-        })?;
-
-        rows.collect()
-    }
-
     pub fn get_invoice_summaries(&self, category: &str, year: Option<&str>) -> SqlResult<Vec<InvoiceSummary>> {
         let mut stmt = self.conn.prepare(
             "SELECT invoices.id, invoice_date, counterparty_name, total_amount, status, confidence_score, file_path
              FROM invoices
              LEFT JOIN invoice_overrides date_override
                ON date_override.invoice_id = invoices.id AND date_override.field_name = 'invoice_date'
-             WHERE invoices.category = ?1
+             WHERE (?1 = 'all' OR invoices.category = ?1)
                AND (
                  ?2 IS NULL
                  OR substr(COALESCE(date_override.override_value, invoices.invoice_date), 1, 4) = ?2
@@ -329,7 +257,7 @@ impl Database {
              FROM invoices
              LEFT JOIN invoice_overrides date_override
                ON date_override.invoice_id = invoices.id AND date_override.field_name = 'invoice_date'
-             WHERE invoices.category = ?1
+             WHERE (?1 = 'all' OR invoices.category = ?1)
                AND COALESCE(date_override.override_value, invoices.invoice_date) IS NOT NULL
                AND substr(COALESCE(date_override.override_value, invoices.invoice_date), 1, 4) != ''
              ORDER BY year DESC",
@@ -337,6 +265,262 @@ impl Database {
 
         let rows = stmt.query_map(params![category], |row| row.get(0))?;
         rows.collect()
+    }
+
+    pub fn get_revenue_customer_source_invoices(&self) -> SqlResult<Vec<CustomerSourceInvoice>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT invoices.id,
+                    TRIM(COALESCE(NULLIF(counterparty.override_value, ''), invoices.counterparty_name)) AS counterparty_name,
+                    COALESCE(NULLIF(date_override.override_value, ''), invoices.invoice_date) AS invoice_date,
+                    COALESCE(NULLIF(amt.override_value, ''), invoices.total_amount) AS total_amount,
+                    invoices.created_at
+             FROM invoices
+             LEFT JOIN invoice_overrides amt
+               ON amt.invoice_id = invoices.id AND amt.field_name = 'total_amount'
+             LEFT JOIN invoice_overrides date_override
+               ON date_override.invoice_id = invoices.id AND date_override.field_name = 'invoice_date'
+             LEFT JOIN invoice_overrides counterparty
+               ON counterparty.invoice_id = invoices.id AND counterparty.field_name = 'counterparty_name'
+             WHERE invoices.category = 'revenue'
+               AND TRIM(COALESCE(NULLIF(counterparty.override_value, ''), invoices.counterparty_name, '')) != ''
+             ORDER BY COALESCE(NULLIF(date_override.override_value, ''), invoices.invoice_date) DESC,
+                      invoices.created_at DESC",
+        )?;
+
+        let rows = stmt.query_map([], |row| {
+            Ok(CustomerSourceInvoice {
+                id: row.get(0)?,
+                counterparty_name: row.get(1)?,
+                invoice_date: row.get(2)?,
+                total_amount: row.get(3)?,
+                created_at: row.get(4)?,
+            })
+        })?;
+
+        rows.collect()
+    }
+
+    pub fn save_customer(&self, customer: &Customer) -> SqlResult<()> {
+        self.conn.execute(
+            "INSERT INTO customers (
+                id, name, source_name, normalized_name, billing_address, general_email,
+                latest_invoice_id, first_invoice_date, last_invoice_date, invoice_count,
+                lifetime_value, avg_monthly_revenue, active_months, enrichment_status,
+                enriched_at, enrichment_source_invoice_id, created_at, updated_at
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)
+            ON CONFLICT(id) DO UPDATE SET
+                name = excluded.name,
+                source_name = excluded.source_name,
+                normalized_name = excluded.normalized_name,
+                billing_address = excluded.billing_address,
+                general_email = excluded.general_email,
+                latest_invoice_id = excluded.latest_invoice_id,
+                first_invoice_date = excluded.first_invoice_date,
+                last_invoice_date = excluded.last_invoice_date,
+                invoice_count = excluded.invoice_count,
+                lifetime_value = excluded.lifetime_value,
+                avg_monthly_revenue = excluded.avg_monthly_revenue,
+                active_months = excluded.active_months,
+                enrichment_status = excluded.enrichment_status,
+                enriched_at = excluded.enriched_at,
+                enrichment_source_invoice_id = excluded.enrichment_source_invoice_id,
+                updated_at = excluded.updated_at",
+            params![
+                customer.id,
+                customer.name,
+                customer.source_name,
+                customer.normalized_name,
+                customer.billing_address,
+                customer.general_email,
+                customer.latest_invoice_id,
+                customer.first_invoice_date,
+                customer.last_invoice_date,
+                customer.invoice_count,
+                customer.lifetime_value,
+                customer.avg_monthly_revenue,
+                customer.active_months,
+                customer.enrichment_status,
+                customer.enriched_at,
+                customer.enrichment_source_invoice_id,
+                customer.created_at,
+                customer.updated_at
+            ],
+        )?;
+        Ok(())
+    }
+
+    pub fn get_customer_by_id(&self, customer_id: &str) -> SqlResult<Option<Customer>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, name, source_name, normalized_name, billing_address, general_email,
+                    latest_invoice_id, first_invoice_date, last_invoice_date, invoice_count,
+                    lifetime_value, avg_monthly_revenue, active_months, enrichment_status,
+                    enriched_at, enrichment_source_invoice_id, created_at, updated_at
+             FROM customers
+             WHERE id = ?1",
+        )?;
+
+        stmt.query_row(params![customer_id], parse_customer_row).optional()
+    }
+
+    pub fn get_customer_by_normalized_name(&self, normalized_name: &str) -> SqlResult<Option<Customer>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, name, source_name, normalized_name, billing_address, general_email,
+                    latest_invoice_id, first_invoice_date, last_invoice_date, invoice_count,
+                    lifetime_value, avg_monthly_revenue, active_months, enrichment_status,
+                    enriched_at, enrichment_source_invoice_id, created_at, updated_at
+             FROM customers
+             WHERE normalized_name = ?1",
+        )?;
+
+        stmt.query_row(params![normalized_name], parse_customer_row).optional()
+    }
+
+    pub fn get_customer_summaries(&self) -> SqlResult<Vec<CustomerSummary>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT customers.id,
+                    customers.name,
+                    customers.general_email,
+                    customers.first_invoice_date,
+                    customers.last_invoice_date,
+                    customers.invoice_count,
+                    COUNT(customer_contacts.id) AS contact_count,
+                    customers.lifetime_value,
+                    customers.avg_monthly_revenue,
+                    customers.active_months
+             FROM customers
+             LEFT JOIN customer_contacts
+               ON customer_contacts.customer_id = customers.id
+             GROUP BY customers.id
+             ORDER BY customers.lifetime_value DESC,
+                      customers.last_invoice_date DESC,
+                      customers.name ASC",
+        )?;
+
+        let rows = stmt.query_map([], |row| {
+            Ok(CustomerSummary {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                general_email: row.get(2)?,
+                first_invoice_date: row.get(3)?,
+                last_invoice_date: row.get(4)?,
+                invoice_count: row.get(5)?,
+                contact_count: row.get(6)?,
+                lifetime_value: row.get(7)?,
+                avg_monthly_revenue: row.get(8)?,
+                active_months: row.get(9)?,
+            })
+        })?;
+
+        rows.collect()
+    }
+
+    pub fn update_customer_field(&self, customer_id: &str, field_name: &str, value: &str) -> SqlResult<()> {
+        let updated_at = now_rfc3339();
+        match field_name {
+            "name" => {
+                self.conn.execute(
+                    "UPDATE customers SET name = ?2, updated_at = ?3 WHERE id = ?1",
+                    params![customer_id, value, updated_at],
+                )?;
+            }
+            "billing_address" => {
+                self.conn.execute(
+                    "UPDATE customers SET billing_address = ?2, updated_at = ?3 WHERE id = ?1",
+                    params![customer_id, empty_to_none(value), updated_at],
+                )?;
+            }
+            "general_email" => {
+                self.conn.execute(
+                    "UPDATE customers SET general_email = ?2, updated_at = ?3 WHERE id = ?1",
+                    params![customer_id, empty_to_none(value), updated_at],
+                )?;
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+
+    pub fn get_customer_contacts(&self, customer_id: &str) -> SqlResult<Vec<CustomerContact>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, customer_id, name, email, created_at, updated_at
+             FROM customer_contacts
+             WHERE customer_id = ?1
+             ORDER BY
+               CASE WHEN TRIM(name) = '' THEN 1 ELSE 0 END,
+               LOWER(name) ASC,
+               created_at ASC",
+        )?;
+
+        let rows = stmt.query_map(params![customer_id], parse_customer_contact_row)?;
+        rows.collect()
+    }
+
+    pub fn add_customer_contact(&self, customer_id: &str) -> SqlResult<CustomerContact> {
+        let contact = CustomerContact {
+            id: Uuid::new_v4().to_string(),
+            customer_id: customer_id.to_string(),
+            name: String::new(),
+            email: String::new(),
+            created_at: now_rfc3339(),
+            updated_at: now_rfc3339(),
+        };
+        self.save_customer_contact(&contact)?;
+        Ok(contact)
+    }
+
+    pub fn save_customer_contact(&self, contact: &CustomerContact) -> SqlResult<()> {
+        self.conn.execute(
+            "INSERT INTO customer_contacts (id, customer_id, name, email, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+             ON CONFLICT(id) DO UPDATE SET
+                customer_id = excluded.customer_id,
+                name = excluded.name,
+                email = excluded.email,
+                updated_at = excluded.updated_at",
+            params![
+                contact.id,
+                contact.customer_id,
+                contact.name,
+                contact.email,
+                contact.created_at,
+                contact.updated_at
+            ],
+        )?;
+        Ok(())
+    }
+
+    pub fn update_customer_contact_field(&self, contact_id: &str, field_name: &str, value: &str) -> SqlResult<()> {
+        let updated_at = now_rfc3339();
+        match field_name {
+            "name" => {
+                self.conn.execute(
+                    "UPDATE customer_contacts SET name = ?2, updated_at = ?3 WHERE id = ?1",
+                    params![contact_id, value, updated_at],
+                )?;
+            }
+            "email" => {
+                self.conn.execute(
+                    "UPDATE customer_contacts SET email = ?2, updated_at = ?3 WHERE id = ?1",
+                    params![contact_id, value, updated_at],
+                )?;
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+
+    pub fn delete_customer_contact(&self, contact_id: &str) -> SqlResult<()> {
+        self.conn
+            .execute("DELETE FROM customer_contacts WHERE id = ?1", params![contact_id])?;
+        Ok(())
+    }
+
+    pub fn delete_customer_by_normalized_name(&self, normalized_name: &str) -> SqlResult<()> {
+        self.conn.execute(
+            "DELETE FROM customers WHERE normalized_name = ?1",
+            params![normalized_name],
+        )?;
+        Ok(())
     }
 
     pub fn mark_invoice_missing(&self, file_path: &str) -> SqlResult<()> {
@@ -586,4 +770,47 @@ fn parse_tags_json(raw: String) -> Vec<String> {
 
 fn tags_to_json(tags: &[String]) -> String {
     serde_json::to_string(tags).unwrap_or_else(|_| "[]".to_string())
+}
+
+fn parse_customer_row(row: &rusqlite::Row<'_>) -> SqlResult<Customer> {
+    Ok(Customer {
+        id: row.get(0)?,
+        name: row.get(1)?,
+        source_name: row.get(2)?,
+        normalized_name: row.get(3)?,
+        billing_address: row.get(4)?,
+        general_email: row.get(5)?,
+        latest_invoice_id: row.get(6)?,
+        first_invoice_date: row.get(7)?,
+        last_invoice_date: row.get(8)?,
+        invoice_count: row.get(9)?,
+        lifetime_value: row.get(10)?,
+        avg_monthly_revenue: row.get(11)?,
+        active_months: row.get(12)?,
+        enrichment_status: row.get(13)?,
+        enriched_at: row.get(14)?,
+        enrichment_source_invoice_id: row.get(15)?,
+        created_at: row.get(16)?,
+        updated_at: row.get(17)?,
+    })
+}
+
+fn parse_customer_contact_row(row: &rusqlite::Row<'_>) -> SqlResult<CustomerContact> {
+    Ok(CustomerContact {
+        id: row.get(0)?,
+        customer_id: row.get(1)?,
+        name: row.get(2)?,
+        email: row.get(3)?,
+        created_at: row.get(4)?,
+        updated_at: row.get(5)?,
+    })
+}
+
+fn empty_to_none(value: &str) -> Option<String> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed.to_string())
+    }
 }

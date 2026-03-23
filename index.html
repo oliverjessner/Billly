@@ -1,174 +1,359 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Billly</title>
-    <link rel="stylesheet" href="/src/styles.css" />
-  </head>
-  <body>
-    <div class="app-shell">
-      <header class="topbar">
-        <div class="brand">
-          <img class="brand-logo" src="/public/logo.png" alt="Billly logo" />
-          <span class="logo">Billly</span>
-          <span class="badge">Invoice Intelligence</span>
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Billly</title>
+        <link rel="stylesheet" href="/src/styles.css" />
+    </head>
+    <body>
+        <div class="app-shell">
+            <header class="topbar">
+                <div class="brand">
+                    <img class="brand-logo" src="/public/logo.png" alt="Billly logo" />
+                    <span class="logo">Billly</span>
+                    <span class="badge">Invoice Intelligence</span>
+                </div>
+                <div class="status" id="status-indicator">
+                    <span class="dot"></span>
+                    <span class="text">Ready</span>
+                </div>
+            </header>
+
+            <nav class="tabs">
+                <button class="tab active" data-view="dashboard">Dashboard</button>
+                <button class="tab" data-view="invoices">Invoices</button>
+                <button class="tab" data-view="customers">Customers</button>
+                <button class="tab" data-view="settings">Settings</button>
+            </nav>
+
+            <main class="content">
+                <section id="view-dashboard" class="view active">
+                    <div class="toolbar">
+                        <div class="toolbar-group">
+                            <label for="year-select">Year</label>
+                            <select id="year-select"></select>
+                            <label for="month-select">Month</label>
+                            <select id="month-select"></select>
+                        </div>
+                    </div>
+
+                    <div class="kpi-grid" id="kpi-grid"></div>
+
+                    <div class="dashboard-top-grid">
+                        <div class="panel panel-span-3">
+                            <h3>Monthly Trend</h3>
+                            <canvas id="chart-monthly" class="dashboard-chart"></canvas>
+                        </div>
+                        <div class="panel">
+                            <h3>Overdue</h3>
+                            <div class="panel-metrics">
+                                <div class="panel-metric">
+                                    <span class="metric-label">Overdue Revenue</span>
+                                    <span class="metric-value negative" id="overdue-revenue"></span>
+                                </div>
+                                <div class="panel-metric">
+                                    <span class="metric-label">Overdue Payables</span>
+                                    <span class="metric-value negative" id="overdue-payables"></span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="panel-grid">
+                        <div class="panel">
+                            <h3>Open Revenue</h3>
+                            <ul class="list dashboard-list" id="open-revenue-list"></ul>
+                        </div>
+                        <div class="panel">
+                            <h3>Open Payables</h3>
+                            <ul class="list dashboard-list" id="open-payables-list"></ul>
+                        </div>
+                        <div class="panel">
+                            <h3 id="best-customer-title">Best Customer</h3>
+                            <ul class="list dashboard-list" id="best-customer-list"></ul>
+                        </div>
+                        <div class="panel">
+                            <h3 id="highest-cost-title">Highest Cost</h3>
+                            <ul class="list dashboard-list" id="highest-cost-list"></ul>
+                        </div>
+                    </div>
+                </section>
+
+                <section id="view-invoices" class="view">
+                    <div class="toolbar">
+                        <div class="segmented" id="invoice-category">
+                            <button class="segment active" data-category="revenue">Revenue</button>
+                            <button class="segment" data-category="payable">Payables</button>
+                        </div>
+                        <div class="toolbar-group">
+                            <label for="invoice-year">Year</label>
+                            <select id="invoice-year"></select>
+                        </div>
+                    </div>
+
+                    <div class="invoices-layout">
+                        <div class="panel list-panel">
+                            <div class="table-scroll">
+                                <table class="table">
+                                    <thead>
+                                        <tr>
+                                            <th>Date</th>
+                                            <th>Company</th>
+                                            <th>Amount</th>
+                                            <th>Status</th>
+                                            <th>Source</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="invoice-list"></tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <div class="panel detail" id="invoice-detail">
+                            <div class="detail-header">
+                                <h3>Details</h3>
+                                <div class="detail-actions">
+                                    <button class="ghost" id="open-pdf">Open File</button>
+                                    <button class="danger" id="delete-invoice">Delete</button>
+                                    <button class="primary" id="reprocess-single">Reprocess</button>
+                                </div>
+                            </div>
+                            <div class="detail-body" id="detail-body">
+                                <p class="muted">Select an invoice from the list.</p>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <section id="view-customers" class="view">
+                    <div class="toolbar">
+                        <div class="toolbar-group">
+                            <span
+                                >Customers are generated from your revenue invoices and enriched once from the latest
+                                invoice text.</span
+                            >
+                        </div>
+                    </div>
+
+                    <div class="invoices-layout customers-layout">
+                        <div class="panel list-panel">
+                            <div class="table-scroll">
+                                <table class="table">
+                                    <thead>
+                                        <tr>
+                                            <th>Customer</th>
+                                            <th>Since</th>
+                                            <th>Last Invoice</th>
+                                            <th>LTV</th>
+                                            <th>Days Since Last Invoice</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="customer-list"></tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <div class="panel detail" id="customer-detail">
+                            <div class="detail-header">
+                                <h3>Customer Details</h3>
+                                <div class="detail-actions">
+                                    <button class="primary" id="add-customer-contact" disabled>Add Contact</button>
+                                </div>
+                            </div>
+                            <div class="detail-body" id="customer-detail-body">
+                                <p class="muted">Select a customer from the list.</p>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <section id="view-settings" class="view">
+                    <div class="settings-shell">
+                        <div class="panel settings-hero">
+                            <div class="settings-hero-copy">
+                                <p class="settings-kicker">Configuration</p>
+                                <h3>Settings</h3>
+                                <p class="settings-hero-text muted">
+                                    Keep workspace folders, AI automation and Gmail access clearly separated so each
+                                    area is easier to scan and manage.
+                                </p>
+                            </div>
+                            <div class="settings-version-card">
+                                <span class="settings-version-label">Billly Build</span>
+                                <span class="settings-version-value" id="app-version-text">Version</span>
+                            </div>
+                        </div>
+
+                        <div class="settings-section-grid">
+                            <div class="panel settings-section">
+                                <div class="settings-section-header">
+                                    <div>
+                                        <p class="settings-kicker">Automation</p>
+                                        <h4>OpenAI</h4>
+                                        <p class="muted">Used for extraction, classification and payable tagging.</p>
+                                    </div>
+                                </div>
+                                <div class="settings-stack">
+                                    <div class="settings-card">
+                                        <div class="settings-card-header">
+                                            <div>
+                                                <h5>API Key</h5>
+                                                <p>Billly uses this key for OCR post-processing and AI features.</p>
+                                            </div>
+                                            <div id="openai-key-saved" class="token-pill">Not configured</div>
+                                        </div>
+                                        <div class="field">
+                                            <label>Secret Key</label>
+                                            <input id="openai-key" type="password" placeholder="sk-..." />
+                                        </div>
+                                        <div class="field-actions">
+                                            <button class="ghost" id="test-openai">Test Key</button>
+                                            <button class="ghost hidden" id="remove-openai-key">Remove Key</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="panel settings-section">
+                                <div class="settings-section-header">
+                                    <div>
+                                        <p class="settings-kicker">Email</p>
+                                        <h4>Google & Gmail</h4>
+                                        <p class="muted">
+                                            Manage the connected Google account and verify Gmail read-only access.
+                                        </p>
+                                    </div>
+                                </div>
+                                <div class="settings-stack">
+                                    <div class="settings-card">
+                                        <div class="settings-card-header">
+                                            <div>
+                                                <h5>Google Account</h5>
+                                                <p>Connect the Google account Billly should use for Gmail features.</p>
+                                            </div>
+                                            <div id="google-account-status" class="token-pill">Not connected</div>
+                                        </div>
+                                        <div class="field-actions">
+                                            <button class="primary" id="connect-google">Connect Google</button>
+                                            <button class="ghost hidden" id="remove-google-account">
+                                                Disconnect Google
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <div class="settings-card">
+                                        <div class="settings-card-header">
+                                            <div>
+                                                <h5>Gmail Access</h5>
+                                                <p>
+                                                    Billly currently requests read-only Gmail access so future email
+                                                    features stay safe by default.
+                                                </p>
+                                            </div>
+                                            <div id="gmail-scope-status" class="token-pill">Not granted</div>
+                                        </div>
+                                        <div class="field-actions">
+                                            <button class="ghost" id="test-gmail">Test Gmail</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="panel settings-section">
+                            <div class="settings-section-header">
+                                <div>
+                                    <p class="settings-kicker">Workspace</p>
+                                    <h4>Folder Sources</h4>
+                                    <p class="muted">Choose where Billly watches revenue invoices and payables.</p>
+                                </div>
+                            </div>
+                            <div class="settings-card-grid">
+                                <div class="settings-card">
+                                    <div class="settings-card-header">
+                                        <div>
+                                            <h5>Revenue Folder</h5>
+                                            <p>Customer invoices and outgoing revenue PDFs.</p>
+                                        </div>
+                                    </div>
+                                    <div class="field">
+                                        <label>Folder Path</label>
+                                        <input id="revenue-folder" type="text" placeholder="/path/to/revenue" />
+                                        <div class="field-actions">
+                                            <button class="ghost" id="pick-revenue-folder">Select Folder</button>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="settings-card">
+                                    <div class="settings-card-header">
+                                        <div>
+                                            <h5>Payables Folder</h5>
+                                            <p>Incoming bills, subscriptions and supplier PDFs.</p>
+                                        </div>
+                                    </div>
+                                    <div class="field">
+                                        <label>Folder Path</label>
+                                        <input id="payable-folder" type="text" placeholder="/path/to/payables" />
+                                        <div class="field-actions">
+                                            <button class="ghost" id="pick-payable-folder">Select Folder</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="panel settings-section">
+                            <div class="settings-section-header">
+                                <div>
+                                    <p class="settings-kicker">Profile</p>
+                                    <h4>Your Business</h4>
+                                    <p class="muted">
+                                        Store the sender address and sender email Billly should use for your company
+                                        profile.
+                                    </p>
+                                </div>
+                            </div>
+                            <div class="settings-card">
+                                <div class="settings-card-header">
+                                    <div>
+                                        <h5>Company Details</h5>
+                                        <p>
+                                            Your email is auto-filled from the connected Gmail account and can still be
+                                            adjusted manually.
+                                        </p>
+                                    </div>
+                                </div>
+                                <div class="settings-profile-grid">
+                                    <div class="field">
+                                        <label>Company Name</label>
+                                        <input id="company-name" type="text" placeholder="Billly GmbH" />
+                                    </div>
+                                    <div class="field">
+                                        <label>Your Email</label>
+                                        <input id="company-email" type="email" placeholder="name@company.com" />
+                                    </div>
+                                    <div class="field">
+                                        <label>Your Address</label>
+                                        <input
+                                            id="company-address"
+                                            type="text"
+                                            placeholder="Street 1&#10;ZIP City&#10;Country"
+                                        />
+                                    </div>
+                                </div>
+                                <div class="field-actions">
+                                    <button class="primary" id="save-settings">Save Settings</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </main>
         </div>
-        <div class="status" id="status-indicator">
-          <span class="dot"></span>
-          <span class="text">Ready</span>
-        </div>
-      </header>
 
-      <nav class="tabs">
-        <button class="tab active" data-view="dashboard">Dashboard</button>
-        <button class="tab" data-view="invoices">Invoices</button>
-        <button class="tab" data-view="settings">Settings</button>
-      </nav>
-
-      <main class="content">
-        <section id="view-dashboard" class="view active">
-          <div class="toolbar">
-            <div class="toolbar-group">
-              <label for="year-select">Year</label>
-              <select id="year-select"></select>
-              <label for="month-select">Month</label>
-              <select id="month-select"></select>
-            </div>
-          </div>
-
-          <div class="kpi-grid" id="kpi-grid"></div>
-
-          <div class="dashboard-top-grid">
-            <div class="panel panel-span-3">
-              <h3>Monthly Trend</h3>
-              <canvas id="chart-monthly" class="dashboard-chart"></canvas>
-            </div>
-            <div class="panel">
-              <h3>Overdue</h3>
-              <div class="panel-metrics">
-                <div class="panel-metric">
-                  <span class="metric-label">Overdue Revenue</span>
-                  <span class="metric-value negative" id="overdue-revenue"></span>
-                </div>
-                <div class="panel-metric">
-                  <span class="metric-label">Overdue Payables</span>
-                  <span class="metric-value negative" id="overdue-payables"></span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div class="panel-grid">
-            <div class="panel">
-              <h3>Open Revenue</h3>
-              <ul class="list dashboard-list" id="open-revenue-list"></ul>
-            </div>
-            <div class="panel">
-              <h3>Open Payables</h3>
-              <ul class="list dashboard-list" id="open-payables-list"></ul>
-            </div>
-            <div class="panel">
-              <h3 id="best-customer-title">Best Customer</h3>
-              <ul class="list dashboard-list" id="best-customer-list"></ul>
-            </div>
-            <div class="panel">
-              <h3 id="highest-cost-title">Highest Cost</h3>
-              <ul class="list dashboard-list" id="highest-cost-list"></ul>
-            </div>
-          </div>
-        </section>
-
-        <section id="view-invoices" class="view">
-          <div class="toolbar">
-            <div class="segmented" id="invoice-category">
-              <button class="segment active" data-category="revenue">Revenue</button>
-              <button class="segment" data-category="payable">Payables</button>
-            </div>
-            <div class="toolbar-group">
-              <label for="invoice-year">Year</label>
-              <select id="invoice-year"></select>
-            </div>
-          </div>
-
-          <div class="invoices-layout">
-            <div class="panel list-panel">
-              <div class="table-scroll">
-                <table class="table">
-                  <thead>
-                    <tr>
-                      <th>Date</th>
-                      <th>Company</th>
-                      <th>Amount</th>
-                      <th>Status</th>
-                      <th>Source</th>
-                    </tr>
-                  </thead>
-                  <tbody id="invoice-list"></tbody>
-                </table>
-              </div>
-            </div>
-
-            <div class="panel detail" id="invoice-detail">
-              <div class="detail-header">
-                <h3>Details</h3>
-                <div class="detail-actions">
-                  <button class="ghost" id="open-pdf">Open File</button>
-                  <button class="danger" id="delete-invoice">Delete</button>
-                  <button class="primary" id="reprocess-single">Reprocess</button>
-                </div>
-              </div>
-              <div class="detail-body" id="detail-body">
-                <p class="muted">Select an invoice from the list.</p>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section id="view-settings" class="view">
-          <div class="panel settings">
-            <h3>Settings</h3>
-            <div class="form-grid">
-              <div class="form-row">
-                <div class="field">
-                  <label>Revenue Folder</label>
-                  <div class="field-row">
-                    <input id="revenue-folder" type="text" placeholder="/path/to/revenue" />
-                    <button class="ghost" id="pick-revenue-folder">Select</button>
-                  </div>
-                </div>
-                <div class="field">
-                  <label>Payables Folder</label>
-                  <div class="field-row">
-                    <input id="payable-folder" type="text" placeholder="/path/to/payables" />
-                    <button class="ghost" id="pick-payable-folder">Select</button>
-                  </div>
-                </div>
-              </div>
-              <div class="form-row">
-                <div class="field">
-                  <label>OpenAI API Key</label>
-                  <input id="openai-key" type="password" placeholder="sk-..." />
-                </div>
-                <div class="field">
-                  <label>Saved API Key</label>
-                  <div class="field-row">
-                    <div id="openai-key-saved" class="token-pill"></div>
-                    <button class="ghost" id="remove-openai-key">Remove</button>
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div class="actions">
-              <button class="primary" id="save-settings">Save</button>
-              <button class="ghost" id="test-openai">Test Key</button>
-            </div>
-          </div>
-        </section>
-      </main>
-    </div>
-
-    <script src="/public/vendor/chart.umd.js"></script>
-    <script type="module" src="/src/main.js"></script>
-  </body>
+        <script src="/public/vendor/chart.umd.js"></script>
+        <script type="module" src="/src/main.js"></script>
+    </body>
 </html>

@@ -13,8 +13,9 @@ const Chart = globalThis.Chart;
 const state = Object.seal({
     currentView: 'dashboard',
     currentCategory: 'revenue',
-    invoiceYear: String(new Date().getFullYear()),
+    invoiceYear: 'all',
     selectedInvoiceId: null,
+    selectedCustomerId: null,
     charts: {
         monthly: null,
     },
@@ -26,6 +27,13 @@ function setStatus(text, ok = true) {
     const indicator = $('#status-indicator');
     indicator.querySelector('.text').textContent = text;
     indicator.querySelector('.dot').style.background = ok ? 'var(--ok)' : 'var(--danger)';
+}
+
+function setPillState(element, text, tone = 'neutral') {
+    if (!element) return;
+    element.textContent = text;
+    element.classList.remove('is-success', 'is-warning', 'is-neutral');
+    element.classList.add(`is-${tone}`);
 }
 
 function formatCurrency(value) {
@@ -44,6 +52,12 @@ function escapeHtml(value) {
         .replaceAll('>', '&gt;');
 }
 
+function getErrorMessage(error) {
+    if (typeof error === 'string') return error;
+    if (error && typeof error.message === 'string') return error.message;
+    return 'Unknown error';
+}
+
 const MONTH_NAMES = [
     'January',
     'February',
@@ -60,10 +74,49 @@ const MONTH_NAMES = [
 ];
 const PAYABLE_TAG_OPTIONS = ['SaaS', 'Insurance', 'Membership', 'Marketing', 'Domain', 'Rent'];
 
+async function loadAppVersion() {
+    const versionText = $('#app-version-text');
+    if (!versionText) return;
+    try {
+        const response = await fetch('/package.json');
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
+        const pkg = await response.json();
+        versionText.textContent = `Version ${pkg.version || 'unknown'}`;
+    } catch (error) {
+        console.error(error);
+        versionText.textContent = 'Version unavailable';
+    }
+}
+
 function monthNameFromValue(value) {
     if (!value) return 'Month';
     const index = Number.parseInt(value, 10) - 1;
     return MONTH_NAMES[index] || 'Month';
+}
+
+function formatCustomerAge(months) {
+    const value = Number.parseInt(months || 0, 10);
+    if (!Number.isFinite(value) || value <= 1) {
+        return '1 month';
+    }
+    return `${value} months`;
+}
+
+function formatDaysSinceLastInvoice(value) {
+    if (!value) return '-';
+    const parsed = new Date(`${value}T00:00:00`);
+    if (Number.isNaN(parsed.getTime())) {
+        return '-';
+    }
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const diffMs = today.getTime() - parsed.getTime();
+    const diffDays = Math.max(0, Math.floor(diffMs / 86400000));
+    if (diffDays === 0) return 'Today';
+    if (diffDays === 1) return '1 day';
+    return `${diffDays} days`;
 }
 
 function setActiveView(view) {
@@ -547,25 +600,272 @@ function renderInvoicePlaceholder() {
     container.innerHTML = `<p class="muted">Select an invoice from the list.</p>`;
 }
 
+async function loadCustomers(options = {}) {
+    const showDetail = options.showDetail ?? state.currentView === 'customers';
+    const customers = await invoke('get_customers');
+    renderCustomerList(customers);
+
+    const addContactButton = $('#add-customer-contact');
+    if (!customers.length) {
+        state.selectedCustomerId = null;
+        addContactButton.disabled = true;
+        if (showDetail) {
+            renderCustomerPlaceholder();
+        }
+        return;
+    }
+
+    const selectedExists = customers.some(item => item.id === state.selectedCustomerId);
+    if (!selectedExists) {
+        state.selectedCustomerId = customers[0].id;
+    }
+
+    addContactButton.disabled = !state.selectedCustomerId || !showDetail;
+    if (showDetail && state.selectedCustomerId) {
+        await selectCustomer(state.selectedCustomerId);
+    }
+}
+
+function renderCustomerList(items) {
+    const tbody = $('#customer-list');
+    tbody.innerHTML = '';
+    if (!items.length) {
+        tbody.innerHTML = `<tr><td colspan="5" class="muted">No customers yet</td></tr>`;
+        return;
+    }
+
+    items.forEach(item => {
+        const row = document.createElement('tr');
+        row.dataset.id = item.id;
+        row.classList.toggle('selected', item.id === state.selectedCustomerId);
+        row.innerHTML = `
+      <td>${escapeHtml(item.name || 'Unknown')}</td>
+      <td>${escapeHtml(item.first_invoice_date || '-')}</td>
+      <td>${escapeHtml(item.last_invoice_date || '-')}</td>
+      <td>${formatCurrency(item.lifetime_value)}</td>
+      <td>${formatDaysSinceLastInvoice(item.last_invoice_date)}</td>
+    `;
+        row.addEventListener('click', () => selectCustomer(item.id));
+        tbody.appendChild(row);
+    });
+}
+
+async function selectCustomer(id) {
+    state.selectedCustomerId = id;
+    $$('#customer-list tr').forEach(row => {
+        row.classList.toggle('selected', row.dataset.id === id);
+    });
+    $('#add-customer-contact').disabled = false;
+    const detail = await invoke('get_customer_detail', { customerId: id });
+    renderCustomerDetail(detail);
+}
+
+function renderCustomerPlaceholder() {
+    const container = $('#customer-detail-body');
+    container.innerHTML = `<p class="muted">Select a customer from the list.</p>`;
+}
+
+function renderCustomerDetail(detail) {
+    const container = $('#customer-detail-body');
+    const customer = detail.customer;
+    const contacts = detail.contacts || [];
+
+    container.innerHTML = `
+      <div class="detail-metrics">
+        <div class="detail-metric-card">
+          <span class="detail-metric-label">Lifetime Value</span>
+          <strong>${formatCurrency(customer.lifetime_value)}</strong>
+        </div>
+        <div class="detail-metric-card">
+          <span class="detail-metric-label">Days Since Last Invoice</span>
+          <strong>${formatDaysSinceLastInvoice(customer.last_invoice_date)}</strong>
+        </div>
+        <div class="detail-metric-card">
+          <span class="detail-metric-label">Relationship</span>
+          <strong>${formatCustomerAge(customer.active_months)}</strong>
+        </div>
+        <div class="detail-metric-card">
+          <span class="detail-metric-label">Invoices</span>
+          <strong>${customer.invoice_count || 0}</strong>
+        </div>
+      </div>
+    `;
+
+    container.appendChild(createCustomerFieldRow('Customer Name', 'name', customer.name || ''));
+    container.appendChild(createCustomerFieldRow('Main Email', 'general_email', customer.general_email || ''));
+    container.appendChild(createCustomerFieldRow('Billing Address', 'billing_address', customer.billing_address || '', true));
+    container.appendChild(createCustomerReadonlyRow('Generated From', customer.source_name || '-'));
+    container.appendChild(createCustomerReadonlyRow('Customer Since', customer.first_invoice_date || '-'));
+    container.appendChild(createCustomerReadonlyRow('Last Invoice', customer.last_invoice_date || '-'));
+    container.appendChild(createCustomerReadonlyRow('AI Enrichment', customer.enrichment_status || 'pending'));
+
+    const contactsBlock = document.createElement('div');
+    contactsBlock.className = 'detail-block detail-contacts-block';
+    contactsBlock.innerHTML = `
+      <div class="detail-block-header">
+        <h4>Contacts</h4>
+        <span class="muted">${contacts.length} saved</span>
+      </div>
+    `;
+
+    const contactsList = document.createElement('div');
+    contactsList.className = 'contact-list';
+
+    if (!contacts.length) {
+        const empty = document.createElement('p');
+        empty.className = 'muted';
+        empty.textContent = 'No contacts yet.';
+        contactsList.appendChild(empty);
+    } else {
+        contacts.forEach(contact => {
+            contactsList.appendChild(createCustomerContactRow(customer.id, contact));
+        });
+    }
+
+    contactsBlock.appendChild(contactsList);
+    container.appendChild(contactsBlock);
+
+    container.querySelectorAll('[data-customer-field]').forEach(input => {
+        input.addEventListener('change', async event => {
+            const field = event.target.dataset.customerField;
+            const value = event.target.value;
+            await invoke('update_customer_field', {
+                payload: {
+                    customerId: customer.id,
+                    fieldName: field,
+                    value,
+                },
+            });
+            await loadCustomers();
+        });
+    });
+}
+
+function createCustomerFieldRow(label, field, value, multiline = false) {
+    const row = document.createElement('div');
+    row.className = `detail-row ${multiline ? 'detail-row-multiline' : ''}`;
+
+    const labelNode = document.createElement('span');
+    labelNode.textContent = label;
+
+    const valueNode = document.createElement('div');
+    valueNode.className = 'detail-value';
+
+    const input = multiline ? document.createElement('textarea') : document.createElement('input');
+    input.dataset.customerField = field;
+    input.value = value;
+    if (multiline) {
+        input.className = 'detail-textarea';
+        input.rows = 3;
+    }
+
+    valueNode.appendChild(input);
+    row.append(labelNode, valueNode);
+    return row;
+}
+
+function createCustomerReadonlyRow(label, value) {
+    const row = document.createElement('div');
+    row.className = 'detail-row';
+    row.innerHTML = `
+      <span>${escapeHtml(label)}</span>
+      <div class="detail-value detail-value-static">${escapeHtml(value)}</div>
+    `;
+    return row;
+}
+
+function createCustomerContactRow(customerId, contact) {
+    const row = document.createElement('div');
+    row.className = 'contact-row';
+
+    const nameInput = document.createElement('input');
+    nameInput.placeholder = 'Name';
+    nameInput.value = contact.name || '';
+
+    const emailInput = document.createElement('input');
+    emailInput.placeholder = 'email@company.com';
+    emailInput.type = 'email';
+    emailInput.value = contact.email || '';
+
+    const removeButton = document.createElement('button');
+    removeButton.type = 'button';
+    removeButton.className = 'ghost';
+    removeButton.textContent = 'Remove';
+
+    nameInput.addEventListener('change', async () => {
+        await invoke('update_customer_contact_field', {
+            payload: {
+                contactId: contact.id,
+                fieldName: 'name',
+                value: nameInput.value,
+            },
+        });
+        await loadCustomers();
+    });
+
+    emailInput.addEventListener('change', async () => {
+        await invoke('update_customer_contact_field', {
+            payload: {
+                contactId: contact.id,
+                fieldName: 'email',
+                value: emailInput.value,
+            },
+        });
+        await loadCustomers();
+    });
+
+    removeButton.addEventListener('click', async () => {
+        await invoke('delete_customer_contact', { contactId: contact.id });
+        await loadCustomers();
+    });
+
+    row.append(nameInput, emailInput, removeButton);
+    return row;
+}
+
 async function loadSettings() {
     const settings = await invoke('get_settings');
     $('#revenue-folder').value = settings.revenue_folder || '';
     $('#payable-folder').value = settings.payable_folder || '';
+    $('#company-name').value = settings.company_name || '';
+    $('#company-email').value = settings.company_email || '';
+    $('#company-address').value = settings.company_address || '';
     const openAiInput = $('#openai-key');
     openAiInput.value = '';
     const savedKeyInput = $('#openai-key-saved');
     const removeButton = $('#remove-openai-key');
     if (settings.openai_api_key_present) {
-        const suffix = settings.openai_api_key_last4 ? `•••• ${settings.openai_api_key_last4}` : '••••';
-        savedKeyInput.textContent = suffix;
+        const suffix = settings.openai_api_key_last4 ? `Saved •••• ${settings.openai_api_key_last4}` : 'Saved key';
+        setPillState(savedKeyInput, suffix, 'success');
+        savedKeyInput.dataset.present = 'true';
         openAiInput.disabled = true;
         openAiInput.classList.add('disabled');
         removeButton.classList.remove('hidden');
     } else {
-        savedKeyInput.textContent = 'Not set';
+        setPillState(savedKeyInput, 'Not configured', 'neutral');
+        savedKeyInput.dataset.present = 'false';
         openAiInput.disabled = false;
         openAiInput.classList.remove('disabled');
         removeButton.classList.add('hidden');
+    }
+
+    const googleStatus = $('#google-account-status');
+    const gmailScopeStatus = $('#gmail-scope-status');
+    const connectGoogleButton = $('#connect-google');
+    const removeGoogleButton = $('#remove-google-account');
+    const testGmailButton = $('#test-gmail');
+    if (settings.google_connected) {
+        setPillState(googleStatus, settings.google_email || 'Connected', 'success');
+        setPillState(gmailScopeStatus, 'Read-only granted', 'success');
+        connectGoogleButton.textContent = 'Reconnect Google';
+        removeGoogleButton.classList.remove('hidden');
+        testGmailButton.disabled = false;
+    } else {
+        setPillState(googleStatus, 'Not connected', 'neutral');
+        setPillState(gmailScopeStatus, 'Not granted', 'warning');
+        connectGoogleButton.textContent = 'Connect Google';
+        removeGoogleButton.classList.add('hidden');
+        testGmailButton.disabled = true;
     }
 }
 
@@ -573,6 +873,9 @@ async function saveSettings() {
     const payload = {
         revenueFolder: $('#revenue-folder').value || null,
         payableFolder: $('#payable-folder').value || null,
+        companyName: $('#company-name').value || null,
+        companyEmail: $('#company-email').value || null,
+        companyAddress: $('#company-address').value || null,
         openaiApiKey: $('#openai-key').value || null,
     };
     await invoke('save_settings', { payload });
@@ -608,7 +911,13 @@ async function init() {
     }
 
     $$('.tab').forEach(tab => {
-        tab.addEventListener('click', () => setActiveView(tab.dataset.view));
+        tab.addEventListener('click', async () => {
+            const view = tab.dataset.view;
+            setActiveView(view);
+            if (view === 'customers') {
+                await loadCustomers({ showDetail: true });
+            }
+        });
     });
 
     $$('.segment').forEach(segment => {
@@ -638,7 +947,7 @@ async function init() {
     $('#save-settings').addEventListener('click', saveSettings);
     $('#test-openai').addEventListener('click', async () => {
         const key = $('#openai-key').value;
-        const savedPresent = $('#openai-key-saved').textContent?.startsWith('••••');
+        const savedPresent = $('#openai-key-saved').dataset.present === 'true';
         if (key && key.trim()) {
             const ok = await invoke('test_openai_key', { apiKey: key });
             setStatus(ok ? 'OpenAI key valid' : 'OpenAI key invalid', ok);
@@ -656,6 +965,53 @@ async function init() {
         await invoke('remove_openai_key');
         await loadSettings();
         setStatus('OpenAI key removed', true);
+    });
+
+    $('#connect-google').addEventListener('click', async () => {
+        try {
+            setStatus('Opening Google login...', true);
+            const email = await invoke('connect_google_account');
+            await loadSettings();
+            setStatus(`Google connected: ${email}`, true);
+        } catch (error) {
+            console.error(error);
+            await loadSettings();
+            setStatus(getErrorMessage(error), false);
+        }
+    });
+
+    $('#remove-google-account').addEventListener('click', async () => {
+        try {
+            await invoke('remove_google_account');
+            await loadSettings();
+            setStatus('Google account disconnected', true);
+        } catch (error) {
+            console.error(error);
+            await loadSettings();
+            setStatus(getErrorMessage(error), false);
+        }
+    });
+
+    $('#test-gmail').addEventListener('click', async () => {
+        try {
+            const email = await invoke('test_gmail_connection');
+            await loadSettings();
+            setStatus(`Gmail ready: ${email}`, true);
+        } catch (error) {
+            console.error(error);
+            await loadSettings();
+            setStatus(getErrorMessage(error), false);
+        }
+    });
+
+    $('#add-customer-contact').addEventListener('click', async () => {
+        if (!state.selectedCustomerId) {
+            setStatus('Select a customer first', false);
+            return;
+        }
+        await invoke('add_customer_contact', { customerId: state.selectedCustomerId });
+        await loadCustomers();
+        setStatus('Contact added', true);
     });
 
     $('#reprocess-single').addEventListener('click', async () => {
@@ -685,6 +1041,7 @@ async function init() {
             await loadDashboard();
             await loadInvoiceYears();
             await loadInvoices();
+            await loadCustomers();
             setStatus('Invoice deleted', true);
         } catch (err) {
             console.error(err);
@@ -693,16 +1050,19 @@ async function init() {
     });
 
     await loadSettings();
+    await loadAppVersion();
     await loadDashboardYears();
     await loadDashboard();
     await loadInvoiceYears();
     await loadInvoices();
+    await loadCustomers();
 
     await listen('invoice-updated', async event => {
         await loadDashboardYears();
         await loadDashboard();
         await loadInvoiceYears();
         await loadInvoices();
+        await loadCustomers();
         const category = event?.payload?.category;
         if (category === 'revenue') {
             setStatus('Found new invoice', true);

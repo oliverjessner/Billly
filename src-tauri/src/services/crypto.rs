@@ -12,10 +12,18 @@ pub struct CryptoService;
 
 impl CryptoService {
     pub fn encrypt_api_key(api_key: &str) -> Result<String> {
-        Self::encrypt_symmetric(api_key)
+        Self::encrypt_secret(api_key)
     }
 
     pub fn decrypt_api_key(encrypted: &str) -> Result<String> {
+        Self::decrypt_secret(encrypted)
+    }
+
+    pub fn encrypt_secret(secret: &str) -> Result<String> {
+        Self::encrypt_symmetric(secret)
+    }
+
+    pub fn decrypt_secret(encrypted: &str) -> Result<String> {
         if encrypted.starts_with("enc:") {
             return Self::decrypt_symmetric(encrypted);
         }
@@ -38,8 +46,6 @@ impl CryptoService {
 
         let nonce = aead::Nonce::assume_unique_for_key(nonce_bytes);
         let mut in_out = plaintext.as_bytes().to_vec();
-        let tag_len = aead::AES_256_GCM.tag_len();
-        in_out.resize(in_out.len() + tag_len, 0);
 
         key.seal_in_place_append_tag(nonce, aead::Aad::empty(), &mut in_out)
             .map_err(|_| anyhow!("Encryption failed"))?;
@@ -79,7 +85,12 @@ impl CryptoService {
         let decrypted = key
             .open_in_place(nonce, aead::Aad::empty(), &mut data)
             .map_err(|_| anyhow!("Decryption failed"))?;
-        let text = String::from_utf8(decrypted.to_vec())?;
+        // Older builds encrypted an extra 16 NUL bytes by pre-resizing the buffer
+        // before `seal_in_place_append_tag`. Trim them on read so existing secrets
+        // remain usable after the crypto fix.
+        let text = String::from_utf8(decrypted.to_vec())?
+            .trim_end_matches('\0')
+            .to_string();
         Ok(text)
     }
 }

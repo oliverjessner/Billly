@@ -3,7 +3,7 @@ use jsonschema::JSONSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
-use crate::models::{normalize_payable_tags, ExtractedInvoiceData, PAYABLE_TAG_OPTIONS};
+use crate::models::{normalize_payable_tags, ExtractedCustomerData, ExtractedInvoiceData, PAYABLE_TAG_OPTIONS};
 
 #[derive(Serialize)]
 struct ChatRequest {
@@ -80,6 +80,29 @@ impl OpenAIExtractor {
         }
 
         Ok((data, raw))
+    }
+
+    pub async fn extract_customer_data(api_key: &str, text: &str) -> Result<ExtractedCustomerData> {
+        let schema = customer_schema();
+        let prompt = customer_prompt();
+        let user = format!("Invoice plain text:\n{}", text);
+
+        let mut raw = call_openai(api_key, &prompt, &user).await?;
+        let mut value = parse_json(&raw)?;
+
+        if !validate_json(&schema, &value) {
+            let fix_prompt = format!(
+                "Fix this JSON so it matches the schema exactly. Return JSON only. JSON:\n{}",
+                raw
+            );
+            raw = call_openai(api_key, &prompt, &fix_prompt).await?;
+            value = parse_json(&raw)?;
+            if !validate_json(&schema, &value) {
+                return Err(anyhow!("Customer JSON validation failed"));
+            }
+        }
+
+        serde_json::from_value(value).map_err(Into::into)
     }
 }
 
@@ -158,6 +181,20 @@ fn extraction_schema() -> JSONSchema {
     JSONSchema::compile(&schema).expect("Invalid JSON schema")
 }
 
+fn customer_schema() -> JSONSchema {
+    let schema = json!({
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["billing_address", "general_email"],
+        "properties": {
+            "billing_address": {"type": ["string", "null"]},
+            "general_email": {"type": ["string", "null"]}
+        }
+    });
+
+    JSONSchema::compile(&schema).expect("Invalid customer JSON schema")
+}
+
 fn validate_json(schema: &JSONSchema, value: &Value) -> bool {
     schema.is_valid(value)
 }
@@ -210,4 +247,21 @@ Fields:
 "#,
         payable_hint
     )
+}
+
+fn customer_prompt() -> String {
+    r#"You extract customer master data from an outgoing revenue invoice.
+Return JSON only and match the schema exactly.
+
+Rules:
+- Identify the billed customer, not the invoice sender.
+- billing_address should contain the customer's postal address as one concise string.
+- general_email should be the best customer contact email explicitly shown in the invoice text.
+- Use null when a value is not clearly present.
+
+Fields:
+- billing_address (string|null)
+- general_email (string|null)
+"#
+    .to_string()
 }

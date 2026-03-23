@@ -29,6 +29,8 @@ jsonschema = "0.17"
 open = "5.3"
 rfd = "0.16"
 whatlang = "0.16"
+url = "2.5"
+regex = "1"
 
 [build-dependencies]
 tauri-build = { version = "2.2", features = [] }

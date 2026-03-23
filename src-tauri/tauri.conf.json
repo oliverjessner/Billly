@@ -29,6 +29,7 @@
     "bundle": {
         "active": true,
         "targets": "all",
+        "resources": ["../client_secret.json"],
         "icon": ["icons/icon.png", "icons/icon.ico", "icons/icon.icns"]
     }
 }

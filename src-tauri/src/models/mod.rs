@@ -65,9 +65,73 @@ pub struct InvoiceDetail {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Customer {
+    pub id: String,
+    pub name: String,
+    pub source_name: String,
+    pub normalized_name: String,
+    pub billing_address: Option<String>,
+    pub general_email: Option<String>,
+    pub latest_invoice_id: Option<String>,
+    pub first_invoice_date: Option<String>,
+    pub last_invoice_date: Option<String>,
+    pub invoice_count: i64,
+    pub lifetime_value: f64,
+    pub avg_monthly_revenue: f64,
+    pub active_months: i64,
+    pub enrichment_status: String,
+    pub enriched_at: Option<String>,
+    pub enrichment_source_invoice_id: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CustomerContact {
+    pub id: String,
+    pub customer_id: String,
+    pub name: String,
+    pub email: String,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CustomerSummary {
+    pub id: String,
+    pub name: String,
+    pub general_email: Option<String>,
+    pub first_invoice_date: Option<String>,
+    pub last_invoice_date: Option<String>,
+    pub invoice_count: i64,
+    pub contact_count: i64,
+    pub lifetime_value: f64,
+    pub avg_monthly_revenue: f64,
+    pub active_months: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CustomerDetail {
+    pub customer: Customer,
+    pub contacts: Vec<CustomerContact>,
+}
+
+#[derive(Debug, Clone)]
+pub struct CustomerSourceInvoice {
+    pub id: String,
+    pub counterparty_name: String,
+    pub invoice_date: Option<String>,
+    pub total_amount: String,
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Settings {
     pub revenue_folder: Option<String>,
     pub payable_folder: Option<String>,
+    pub company_name: Option<String>,
+    pub company_email: Option<String>,
+    pub company_address: Option<String>,
     pub openai_api_key: Option<String>,
 }
 
@@ -75,8 +139,13 @@ pub struct Settings {
 pub struct SettingsPublic {
     pub revenue_folder: Option<String>,
     pub payable_folder: Option<String>,
+    pub company_name: Option<String>,
+    pub company_email: Option<String>,
+    pub company_address: Option<String>,
     pub openai_api_key_present: bool,
     pub openai_api_key_last4: Option<String>,
+    pub google_connected: bool,
+    pub google_email: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -118,4 +187,10 @@ pub struct ExtractedInvoiceData {
     pub tags: Option<Vec<String>>,
     pub extraction_notes: String,
     pub confidence_score: Option<f64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExtractedCustomerData {
+    pub billing_address: Option<String>,
+    pub general_email: Option<String>,
 }
