@@ -24,6 +24,7 @@
                 <button class="tab active" data-view="dashboard">Dashboard</button>
                 <button class="tab" data-view="invoices">Invoices</button>
                 <button class="tab" data-view="customers">Customers</button>
+                <button class="tab" data-view="emails">Emails</button>
                 <button class="tab" data-view="settings">Settings</button>
             </nav>
 
@@ -98,11 +99,61 @@
                                 <table class="table">
                                     <thead>
                                         <tr>
-                                            <th>Date</th>
-                                            <th>Company</th>
-                                            <th>Amount</th>
-                                            <th>Status</th>
-                                            <th>Source</th>
+                                            <th>
+                                                <button
+                                                    class="table-sort"
+                                                    type="button"
+                                                    data-table="invoices"
+                                                    data-sort-key="invoice_date"
+                                                >
+                                                    <span>Date</span>
+                                                    <span class="table-sort-indicator"></span>
+                                                </button>
+                                            </th>
+                                            <th>
+                                                <button
+                                                    class="table-sort"
+                                                    type="button"
+                                                    data-table="invoices"
+                                                    data-sort-key="counterparty_name"
+                                                >
+                                                    <span>Company</span>
+                                                    <span class="table-sort-indicator"></span>
+                                                </button>
+                                            </th>
+                                            <th>
+                                                <button
+                                                    class="table-sort"
+                                                    type="button"
+                                                    data-table="invoices"
+                                                    data-sort-key="total_amount"
+                                                >
+                                                    <span>Amount</span>
+                                                    <span class="table-sort-indicator"></span>
+                                                </button>
+                                            </th>
+                                            <th>
+                                                <button
+                                                    class="table-sort"
+                                                    type="button"
+                                                    data-table="invoices"
+                                                    data-sort-key="status"
+                                                >
+                                                    <span>Status</span>
+                                                    <span class="table-sort-indicator"></span>
+                                                </button>
+                                            </th>
+                                            <th>
+                                                <button
+                                                    class="table-sort"
+                                                    type="button"
+                                                    data-table="invoices"
+                                                    data-sort-key="file_path"
+                                                >
+                                                    <span>Source</span>
+                                                    <span class="table-sort-indicator"></span>
+                                                </button>
+                                            </th>
                                         </tr>
                                     </thead>
                                     <tbody id="invoice-list"></tbody>
@@ -127,26 +178,68 @@
                 </section>
 
                 <section id="view-customers" class="view">
-                    <div class="toolbar">
-                        <div class="toolbar-group">
-                            <span
-                                >Customers are generated from your revenue invoices and enriched once from the latest
-                                invoice text.</span
-                            >
-                        </div>
-                    </div>
-
+                    <div class="toolbar toolbar-spacer" aria-hidden="true"></div>
                     <div class="invoices-layout customers-layout">
                         <div class="panel list-panel">
                             <div class="table-scroll">
                                 <table class="table">
                                     <thead>
                                         <tr>
-                                            <th>Customer</th>
-                                            <th>Since</th>
-                                            <th>Last Invoice</th>
-                                            <th>LTV</th>
-                                            <th>Days Since Last Invoice</th>
+                                            <th>
+                                                <button
+                                                    class="table-sort"
+                                                    type="button"
+                                                    data-table="customers"
+                                                    data-sort-key="name"
+                                                >
+                                                    <span>Customer</span>
+                                                    <span class="table-sort-indicator"></span>
+                                                </button>
+                                            </th>
+                                            <th>
+                                                <button
+                                                    class="table-sort"
+                                                    type="button"
+                                                    data-table="customers"
+                                                    data-sort-key="first_invoice_date"
+                                                >
+                                                    <span>Since</span>
+                                                    <span class="table-sort-indicator"></span>
+                                                </button>
+                                            </th>
+                                            <th>
+                                                <button
+                                                    class="table-sort"
+                                                    type="button"
+                                                    data-table="customers"
+                                                    data-sort-key="last_invoice_date"
+                                                >
+                                                    <span>Last Invoice</span>
+                                                    <span class="table-sort-indicator"></span>
+                                                </button>
+                                            </th>
+                                            <th>
+                                                <button
+                                                    class="table-sort"
+                                                    type="button"
+                                                    data-table="customers"
+                                                    data-sort-key="lifetime_value"
+                                                >
+                                                    <span>LTV</span>
+                                                    <span class="table-sort-indicator"></span>
+                                                </button>
+                                            </th>
+                                            <th>
+                                                <button
+                                                    class="table-sort"
+                                                    type="button"
+                                                    data-table="customers"
+                                                    data-sort-key="days_since_last_invoice"
+                                                >
+                                                    <span>Days Since Last Invoice</span>
+                                                    <span class="table-sort-indicator"></span>
+                                                </button>
+                                            </th>
                                         </tr>
                                     </thead>
                                     <tbody id="customer-list"></tbody>
@@ -168,6 +261,207 @@
                     </div>
                 </section>
 
+                <section id="view-emails" class="view">
+                    <div class="email-nav">
+                        <div class="settings-toggle" role="tablist" aria-label="Email Sections">
+                            <button class="settings-toggle-button active" type="button" data-email-section="send">
+                                Send
+                            </button>
+                            <button class="settings-toggle-button" type="button" data-email-section="templates">
+                                Templates
+                            </button>
+                            <button class="settings-toggle-button" type="button" data-email-section="signature">
+                                Signature
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="email-panel" data-email-panel="send">
+                        <div class="emails-layout">
+                            <div class="panel email-recipient-panel">
+                                <div class="detail-header">
+                                    <div>
+                                        <h3>Recipients</h3>
+                                        <p class="muted">Choose any customer or saved contact with an email address.</p>
+                                    </div>
+                                </div>
+
+                                <div class="field">
+                                    <label>Search</label>
+                                    <input
+                                        id="email-recipient-search"
+                                        type="text"
+                                        placeholder="Search customer or contact"
+                                    />
+                                </div>
+
+                                <div class="email-recipient-list" id="email-recipient-list"></div>
+                            </div>
+
+                            <div class="panel email-compose-panel">
+                                <div class="detail-header">
+                                    <div>
+                                        <h3>Send Invoice</h3>
+                                        <p class="muted">Pick a recipient, choose an invoice and send through Gmail.</p>
+                                    </div>
+                                    <button class="primary button-with-spinner" id="send-email" disabled>
+                                        <span class="button-spinner" aria-hidden="true"></span>
+                                        <span class="button-label">Send via Gmail</span>
+                                    </button>
+                                </div>
+
+                                <div class="email-compose-grid">
+                                    <div class="field">
+                                        <label>From</label>
+                                        <input
+                                            id="email-from"
+                                            type="text"
+                                            readonly
+                                            placeholder="Connect Google first"
+                                        />
+                                    </div>
+
+                                    <div class="field">
+                                        <label>Recipient</label>
+                                        <input
+                                            id="email-recipient-display"
+                                            type="text"
+                                            readonly
+                                            placeholder="Select a customer or contact"
+                                        />
+                                    </div>
+
+                                    <div class="field">
+                                        <label>Invoice</label>
+                                        <select id="email-invoice-select"></select>
+                                    </div>
+
+                                    <div class="field">
+                                        <label>Template</label>
+                                        <select id="email-template-select"></select>
+                                    </div>
+
+                                    <div class="field field-span-2">
+                                        <label>Subject</label>
+                                        <input
+                                            id="email-compose-subject"
+                                            type="text"
+                                            placeholder="Invoice from Billly"
+                                        />
+                                    </div>
+
+                                    <div class="email-compose-split field-span-2">
+                                        <div class="field email-compose-message-field">
+                                            <label>Message</label>
+                                            <textarea
+                                                style="resize: none"
+                                                id="email-compose-body"
+                                                placeholder="Hi <name>,&#10;&#10;attached you will find your invoice."
+                                            ></textarea>
+                                        </div>
+
+                                        <div class="field email-preview-field">
+                                            <label>Preview</label>
+                                            <div class="detail-block email-preview-block">
+                                                <div class="detail-block-header email-preview-header">
+                                                    <span class="muted" id="email-preview-meta"
+                                                        >Load a template or type manually</span
+                                                    >
+                                                </div>
+                                                <pre id="email-preview">
+Select a recipient to preview the final email.</pre
+                                                >
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="email-panel hidden" data-email-panel="templates">
+                        <div class="emails-layout emails-template-layout">
+                            <div class="panel email-template-list-panel">
+                                <div class="detail-header">
+                                    <div>
+                                        <h3>Templates</h3>
+                                    </div>
+                                    <button class="ghost" id="new-email-template">New Template</button>
+                                </div>
+
+                                <div class="email-template-list" id="email-template-list"></div>
+                            </div>
+
+                            <div class="panel email-template-editor-panel">
+                                <div class="detail-header">
+                                    <div>
+                                        <h3>Template Editor</h3>
+                                    </div>
+                                </div>
+
+                                <div class="email-template-editor">
+                                    <div class="field">
+                                        <label>Template Name</label>
+                                        <input id="email-template-name" type="text" placeholder="Follow-up Invoice" />
+                                    </div>
+
+                                    <div class="field">
+                                        <label>Subject</label>
+                                        <input
+                                            id="email-template-subject"
+                                            type="text"
+                                            placeholder="Invoice from Billly for <name>"
+                                        />
+                                    </div>
+
+                                    <div class="field">
+                                        <label>Body</label>
+                                        <textarea
+                                            id="email-template-body"
+                                            placeholder="Hi <name>,&#10;&#10;attached you will find your invoice. If anything is unclear, you can reach me at <email>."
+                                        ></textarea>
+                                    </div>
+
+                                    <div class="detail-block email-placeholder-block">
+                                        <div class="detail-block-header">
+                                            <h4>Available Placeholders</h4>
+                                        </div>
+                                        <div class="email-placeholder-list">
+                                            <span class="email-placeholder-chip">&lt;name&gt;</span>
+                                            <span class="email-placeholder-chip">&lt;email&gt;</span>
+                                            <span class="email-placeholder-chip">&lt;month&gt;</span>
+                                            <span class="email-placeholder-chip">&lt;year&gt;</span>
+                                        </div>
+                                    </div>
+
+                                    <div class="field-actions">
+                                        <button class="primary" id="save-email-template">Save Template</button>
+                                        <button class="ghost" id="delete-email-template">Delete Template</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="email-panel hidden" data-email-panel="signature">
+                        <div class="panel email-signature-panel">
+                            <div class="detail-header">
+                                <div>
+                                    <h3>Signature</h3>
+                                </div>
+                                <button class="primary" id="save-email-signature">Save Signature</button>
+                            </div>
+
+                            <div class="email-signature-editor">
+                                <div class="field">
+                                    <label>Default Signature</label>
+                                    <textarea id="email-signature" placeholder="Best regards,&#10;Billly"></textarea>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
                 <section id="view-settings" class="view">
                     <div class="settings-shell">
                         <div class="panel settings-hero">
@@ -175,8 +469,8 @@
                                 <p class="settings-kicker">Configuration</p>
                                 <h3>Settings</h3>
                                 <p class="settings-hero-text muted">
-                                    Keep workspace folders, AI automation and Gmail access clearly separated so each
-                                    area is easier to scan and manage.
+                                    Keep auths, folder paths and company data clearly separated so each area is easier
+                                    to scan and manage.
                                 </p>
                             </div>
                             <div class="settings-version-card">
@@ -185,21 +479,42 @@
                             </div>
                         </div>
 
-                        <div class="settings-section-grid">
-                            <div class="panel settings-section">
-                                <div class="settings-section-header">
-                                    <div>
-                                        <p class="settings-kicker">Automation</p>
-                                        <h4>OpenAI</h4>
-                                        <p class="muted">Used for extraction, classification and payable tagging.</p>
-                                    </div>
+                        <div class="settings-nav">
+                            <div class="settings-toggle" role="tablist" aria-label="Settings Sections">
+                                <button
+                                    class="settings-toggle-button active"
+                                    type="button"
+                                    data-settings-section="auths"
+                                >
+                                    Auths
+                                </button>
+                                <button class="settings-toggle-button" type="button" data-settings-section="folders">
+                                    Folders
+                                </button>
+                                <button class="settings-toggle-button" type="button" data-settings-section="data">
+                                    Data
+                                </button>
+                            </div>
+                            <button class="primary" id="save-settings">Save Settings</button>
+                        </div>
+
+                        <div class="panel settings-section" data-settings-panel="auths">
+                            <div class="settings-section-header">
+                                <div>
+                                    <p class="settings-kicker">Access</p>
+                                    <h4>Auths</h4>
+                                    <p class="muted">
+                                        Manage API access and the connected Google account in one place.
+                                    </p>
                                 </div>
+                            </div>
+                            <div class="settings-section-grid">
                                 <div class="settings-stack">
                                     <div class="settings-card">
                                         <div class="settings-card-header">
                                             <div>
-                                                <h5>API Key</h5>
-                                                <p>Billly uses this key for OCR post-processing and AI features.</p>
+                                                <h5>OpenAI</h5>
+                                                <p>Used for extraction, classification and payable tagging.</p>
                                             </div>
                                             <div id="openai-key-saved" class="token-pill">Not configured</div>
                                         </div>
@@ -213,18 +528,7 @@
                                         </div>
                                     </div>
                                 </div>
-                            </div>
 
-                            <div class="panel settings-section">
-                                <div class="settings-section-header">
-                                    <div>
-                                        <p class="settings-kicker">Email</p>
-                                        <h4>Google & Gmail</h4>
-                                        <p class="muted">
-                                            Manage the connected Google account and verify Gmail read-only access.
-                                        </p>
-                                    </div>
-                                </div>
                                 <div class="settings-stack">
                                     <div class="settings-card">
                                         <div class="settings-card-header">
@@ -247,8 +551,8 @@
                                             <div>
                                                 <h5>Gmail Access</h5>
                                                 <p>
-                                                    Billly currently requests read-only Gmail access so future email
-                                                    features stay safe by default.
+                                                    Billly now requests Gmail send access so it can send emails and
+                                                    attachments from the connected account.
                                                 </p>
                                             </div>
                                             <div id="gmail-scope-status" class="token-pill">Not granted</div>
@@ -261,11 +565,11 @@
                             </div>
                         </div>
 
-                        <div class="panel settings-section">
+                        <div class="panel settings-section hidden" data-settings-panel="folders">
                             <div class="settings-section-header">
                                 <div>
                                     <p class="settings-kicker">Workspace</p>
-                                    <h4>Folder Sources</h4>
+                                    <h4>Folders</h4>
                                     <p class="muted">Choose where Billly watches revenue invoices and payables.</p>
                                 </div>
                             </div>
@@ -304,11 +608,11 @@
                             </div>
                         </div>
 
-                        <div class="panel settings-section">
+                        <div class="panel settings-section hidden" data-settings-panel="data">
                             <div class="settings-section-header">
                                 <div>
                                     <p class="settings-kicker">Profile</p>
-                                    <h4>Your Business</h4>
+                                    <h4>Data</h4>
                                     <p class="muted">
                                         Store the sender address and sender email Billly should use for your company
                                         profile.
@@ -342,9 +646,6 @@
                                             placeholder="Street 1&#10;ZIP City&#10;Country"
                                         />
                                     </div>
-                                </div>
-                                <div class="field-actions">
-                                    <button class="primary" id="save-settings">Save Settings</button>
                                 </div>
                             </div>
                         </div>

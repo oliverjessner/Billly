@@ -7,10 +7,10 @@ use chrono::{DateTime, Duration, Utc};
 use serde::Deserialize;
 use tauri::{AppHandle, State};
 
-const GOOGLE_REFRESH_TOKEN_KEY: &str = "google_refresh_token";
-const GOOGLE_EMAIL_KEY: &str = "google_email";
-const GOOGLE_ACCESS_TOKEN_KEY: &str = "google_access_token";
-const GOOGLE_ACCESS_TOKEN_EXPIRES_AT_KEY: &str = "google_access_token_expires_at";
+pub(crate) const GOOGLE_REFRESH_TOKEN_KEY: &str = "google_refresh_token";
+pub(crate) const GOOGLE_EMAIL_KEY: &str = "google_email";
+pub(crate) const GOOGLE_ACCESS_TOKEN_KEY: &str = "google_access_token";
+pub(crate) const GOOGLE_ACCESS_TOKEN_EXPIRES_AT_KEY: &str = "google_access_token_expires_at";
 const COMPANY_NAME_KEY: &str = "company_name";
 const COMPANY_EMAIL_KEY: &str = "company_email";
 const COMPANY_ADDRESS_KEY: &str = "company_address";
@@ -206,15 +206,24 @@ pub async fn test_gmail_connection(
     app: AppHandle,
 ) -> Result<String, String> {
     if let Some(saved_access_token) = load_saved_google_access_token(&state)? {
-        match GoogleAuthService::fetch_gmail_email(&saved_access_token).await {
-            Ok(email) => {
-                let db = state.db.lock().map_err(|_| "DB lock".to_string())?;
-                db.set_setting(GOOGLE_EMAIL_KEY, &email)
-                    .map_err(|e| e.to_string())?;
-                db.set_setting(COMPANY_EMAIL_KEY, &email)
-                    .map_err(|e| e.to_string())?;
-                return Ok(email);
-            }
+        match GoogleAuthService::ensure_required_gmail_scope_for_access_token(&saved_access_token).await {
+            Ok(_) => match GoogleAuthService::fetch_google_email(&saved_access_token).await {
+                Ok(email) => {
+                    let db = state.db.lock().map_err(|_| "DB lock".to_string())?;
+                    db.set_setting(GOOGLE_EMAIL_KEY, &email)
+                        .map_err(|e| e.to_string())?;
+                    db.set_setting(COMPANY_EMAIL_KEY, &email)
+                        .map_err(|e| e.to_string())?;
+                    return Ok(email);
+                }
+                Err(_) => {
+                    let db = state.db.lock().map_err(|_| "DB lock".to_string())?;
+                    db.delete_setting(GOOGLE_ACCESS_TOKEN_KEY)
+                        .map_err(|e| e.to_string())?;
+                    db.delete_setting(GOOGLE_ACCESS_TOKEN_EXPIRES_AT_KEY)
+                        .map_err(|e| e.to_string())?;
+                }
+            },
             Err(_) => {
                 let db = state.db.lock().map_err(|_| "DB lock".to_string())?;
                 db.delete_setting(GOOGLE_ACCESS_TOKEN_KEY)
@@ -252,10 +261,16 @@ pub async fn test_gmail_connection(
                         .to_string(),
                 );
             }
+            if message.contains("insufficient scopes") {
+                return Err(
+                    "Google login is missing Gmail send permission. Update the Gmail scope in Google Cloud, then reconnect Google."
+                        .to_string(),
+                );
+            }
             return Err(message);
         }
     };
-    let email = GoogleAuthService::fetch_gmail_email(&refresh_session.access_token)
+    let email = GoogleAuthService::fetch_google_email(&refresh_session.access_token)
         .await
         .map_err(|e| e.to_string())?;
 
@@ -338,12 +353,12 @@ fn load_settings_internal(state: &State<'_, AppState>) -> Result<Settings, Strin
     })
 }
 
-fn access_token_expires_at(expires_in_seconds: Option<i64>) -> DateTime<Utc> {
+pub(crate) fn access_token_expires_at(expires_in_seconds: Option<i64>) -> DateTime<Utc> {
     let ttl = expires_in_seconds.unwrap_or(3600).max(60);
     Utc::now() + Duration::seconds(ttl.saturating_sub(60))
 }
 
-fn load_saved_google_access_token(state: &State<'_, AppState>) -> Result<Option<String>, String> {
+pub(crate) fn load_saved_google_access_token(state: &State<'_, AppState>) -> Result<Option<String>, String> {
     let db = state.db.lock().map_err(|_| "DB lock".to_string())?;
     let encrypted_access_token = match db
         .get_setting(GOOGLE_ACCESS_TOKEN_KEY)

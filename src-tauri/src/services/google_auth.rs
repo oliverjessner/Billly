@@ -12,7 +12,9 @@ use url::Url;
 
 const CALLBACK_TIMEOUT: Duration = Duration::from_secs(180);
 const IO_TIMEOUT: Duration = Duration::from_secs(10);
-const GOOGLE_SCOPE_GMAIL_READONLY: &str = "https://www.googleapis.com/auth/gmail.readonly";
+const GOOGLE_SCOPE_OPENID: &str = "openid";
+const GOOGLE_SCOPE_EMAIL: &str = "email";
+const GOOGLE_SCOPE_GMAIL_SEND: &str = "https://www.googleapis.com/auth/gmail.send";
 
 pub struct GoogleAuthService;
 
@@ -56,9 +58,8 @@ struct GoogleTokenInfoResponse {
 }
 
 #[derive(Deserialize)]
-struct GmailProfileResponse {
-    #[serde(rename = "emailAddress")]
-    email_address: String,
+struct GoogleUserInfoResponse {
+    email: String,
 }
 
 impl GoogleAuthService {
@@ -79,7 +80,7 @@ impl GoogleAuthService {
         let code = wait_for_callback(listener, &state).await?;
         let token_response = exchange_code(&client, &code, &redirect_uri, &code_verifier).await?;
         ensure_gmail_scope(&token_response).await?;
-        let email = fetch_gmail_email(&token_response.access_token).await?;
+        let email = fetch_google_email(&token_response.access_token).await?;
 
         Ok(GoogleAuthSession {
             email,
@@ -100,8 +101,29 @@ impl GoogleAuthService {
         })
     }
 
-    pub async fn fetch_gmail_email(access_token: &str) -> Result<String> {
-        fetch_gmail_email(access_token).await
+    pub async fn fetch_google_email(access_token: &str) -> Result<String> {
+        fetch_google_email(access_token).await
+    }
+
+    pub async fn ensure_required_gmail_scope_for_access_token(access_token: &str) -> Result<()> {
+        ensure_access_token_has_required_scope(access_token).await
+    }
+
+    pub async fn send_gmail_message(access_token: &str, raw_message: &str) -> Result<()> {
+        let response = reqwest::Client::new()
+            .post("https://gmail.googleapis.com/gmail/v1/users/me/messages/send")
+            .bearer_auth(access_token)
+            .json(&serde_json::json!({ "raw": raw_message }))
+            .send()
+            .await
+            .context("Failed to call Gmail send API")?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(anyhow!("Gmail API request failed ({status}): {body}"));
+        }
+        Ok(())
     }
 }
 
@@ -138,7 +160,10 @@ fn build_auth_url(
         .append_pair("client_id", &client.client_id)
         .append_pair("redirect_uri", redirect_uri)
         .append_pair("response_type", "code")
-        .append_pair("scope", GOOGLE_SCOPE_GMAIL_READONLY)
+        .append_pair(
+            "scope",
+            &format!("{GOOGLE_SCOPE_OPENID} {GOOGLE_SCOPE_EMAIL} {GOOGLE_SCOPE_GMAIL_SEND}"),
+        )
         .append_pair("access_type", "offline")
         .append_pair("include_granted_scopes", "true")
         .append_pair("prompt", "consent")
@@ -314,25 +339,25 @@ async fn exchange_refresh_token(
         .context("Failed to parse Google refresh response")
 }
 
-async fn fetch_gmail_email(access_token: &str) -> Result<String> {
+async fn fetch_google_email(access_token: &str) -> Result<String> {
     let response = reqwest::Client::new()
-        .get("https://gmail.googleapis.com/gmail/v1/users/me/profile")
+        .get("https://openidconnect.googleapis.com/v1/userinfo")
         .bearer_auth(access_token)
         .send()
         .await
-        .context("Failed to call Gmail profile API")?;
+        .context("Failed to call Google userinfo API")?;
 
     if !response.status().is_success() {
         let status = response.status();
         let body = response.text().await.unwrap_or_default();
-        return Err(anyhow!("Gmail API request failed ({status}): {body}"));
+        return Err(anyhow!("Google userinfo request failed ({status}): {body}"));
     }
 
     let profile = response
-        .json::<GmailProfileResponse>()
+        .json::<GoogleUserInfoResponse>()
         .await
-        .context("Failed to parse Gmail profile response")?;
-    Ok(profile.email_address)
+        .context("Failed to parse Google userinfo response")?;
+    Ok(profile.email)
 }
 
 async fn ensure_gmail_scope(token_response: &GoogleTokenResponse) -> Result<()> {
@@ -341,16 +366,25 @@ async fn ensure_gmail_scope(token_response: &GoogleTokenResponse) -> Result<()> 
         _ => fetch_tokeninfo_scopes(&token_response.access_token).await?,
     };
 
+    ensure_scope_string_has_required_scope(&granted_scopes)
+}
+
+async fn ensure_access_token_has_required_scope(access_token: &str) -> Result<()> {
+    let granted_scopes = fetch_tokeninfo_scopes(access_token).await?;
+    ensure_scope_string_has_required_scope(&granted_scopes)
+}
+
+fn ensure_scope_string_has_required_scope(granted_scopes: &str) -> Result<()> {
     if granted_scopes
         .split_whitespace()
-        .any(|scope| scope == GOOGLE_SCOPE_GMAIL_READONLY)
+        .any(|scope| scope == GOOGLE_SCOPE_GMAIL_SEND)
     {
         return Ok(());
     }
 
     Err(anyhow!(
         "Google granted insufficient scopes. Expected {required}, got: {granted}",
-        required = GOOGLE_SCOPE_GMAIL_READONLY,
+        required = GOOGLE_SCOPE_GMAIL_SEND,
         granted = granted_scopes
     ))
 }

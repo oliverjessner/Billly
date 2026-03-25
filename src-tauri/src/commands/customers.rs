@@ -79,7 +79,7 @@ pub async fn delete_customer_contact(contact_id: String, state: State<'_, AppSta
         .map_err(|e| e.to_string())
 }
 
-fn sync_generated_customers(state: &State<'_, AppState>) -> Result<(), String> {
+pub(crate) fn sync_generated_customers(state: &State<'_, AppState>) -> Result<(), String> {
     let settings = state
         .settings
         .lock()

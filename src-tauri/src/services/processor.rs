@@ -77,6 +77,7 @@ pub async fn process_invoice(
         net_amount: None,
         status: "open".to_string(),
         paid_at: None,
+        send_date: None,
         document_language: None,
         tags: Vec::new(),
         created_at: now.clone(),

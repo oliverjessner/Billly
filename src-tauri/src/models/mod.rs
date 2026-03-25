@@ -31,6 +31,7 @@ pub struct Invoice {
     pub net_amount: Option<String>,
     pub status: String,
     pub paid_at: Option<String>,
+    pub send_date: Option<String>,
     pub document_language: Option<String>,
     pub tags: Vec<String>,
     pub created_at: String,
@@ -100,6 +101,7 @@ pub struct CustomerContact {
 pub struct CustomerSummary {
     pub id: String,
     pub name: String,
+    pub normalized_name: String,
     pub general_email: Option<String>,
     pub first_invoice_date: Option<String>,
     pub last_invoice_date: Option<String>,
@@ -146,6 +148,51 @@ pub struct SettingsPublic {
     pub openai_api_key_last4: Option<String>,
     pub google_connected: bool,
     pub google_email: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EmailTemplate {
+    pub id: String,
+    pub name: String,
+    pub subject: String,
+    pub body: String,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EmailRecipientOption {
+    pub id: String,
+    pub customer_id: String,
+    pub customer_name: String,
+    pub contact_id: Option<String>,
+    pub display_name: String,
+    pub email: String,
+    pub kind: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EmailInvoiceOption {
+    pub id: String,
+    pub customer_id: Option<String>,
+    pub customer_name: Option<String>,
+    pub invoice_number: Option<String>,
+    pub invoice_date: Option<String>,
+    pub total_amount: String,
+    pub currency: String,
+    pub status: String,
+    pub file_name: Option<String>,
+    pub file_path: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EmailWorkspace {
+    pub signature: Option<String>,
+    pub sender_email: Option<String>,
+    pub gmail_connected: bool,
+    pub templates: Vec<EmailTemplate>,
+    pub recipients: Vec<EmailRecipientOption>,
+    pub invoices: Vec<EmailInvoiceOption>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

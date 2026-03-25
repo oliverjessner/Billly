@@ -4,8 +4,8 @@ use std::path::PathBuf;
 use uuid::Uuid;
 
 use crate::models::{
-    Customer, CustomerContact, CustomerSourceInvoice, CustomerSummary, DashboardListItem, Invoice, InvoiceOverride,
-    InvoiceSummary,
+    Customer, CustomerContact, CustomerSourceInvoice, CustomerSummary, DashboardListItem, EmailInvoiceOption,
+    EmailTemplate, Invoice, InvoiceOverride, InvoiceSummary,
 };
 use crate::utils::now_rfc3339;
 
@@ -13,10 +13,20 @@ pub struct Database {
     conn: Connection,
 }
 
-const MIGRATIONS: &[(&str, &str)] = &[(
-    "001_init_schema.sql",
-    include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/../migrations/001_init_schema.sql")),
-)];
+const MIGRATIONS: &[(&str, &str)] = &[
+    (
+        "001_init_schema.sql",
+        include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/../migrations/001_init_schema.sql")),
+    ),
+    (
+        "002_add_email_templates.sql",
+        include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/../migrations/002_add_email_templates.sql")),
+    ),
+    (
+        "003_add_invoice_send_date.sql",
+        include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/../migrations/003_add_invoice_send_date.sql")),
+    ),
+];
 
 impl Database {
     pub fn new(db_path: PathBuf) -> SqlResult<Self> {
@@ -69,8 +79,8 @@ impl Database {
                 id, category, file_path, file_hash, file_modified_at, ingestion_status,
                 ocr_text, extracted_json, confidence_score, invoice_number, invoice_date,
                 due_date, counterparty_name, total_amount, currency, tax_amount, net_amount,
-                status, paid_at, document_language, tags, created_at, updated_at
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23)",
+                status, paid_at, send_date, document_language, tags, created_at, updated_at
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24)",
             params![
                 invoice.id,
                 invoice.category,
@@ -91,6 +101,7 @@ impl Database {
                 invoice.net_amount,
                 invoice.status,
                 invoice.paid_at,
+                invoice.send_date,
                 invoice.document_language,
                 tags_to_json(&invoice.tags),
                 invoice.created_at,
@@ -105,7 +116,7 @@ impl Database {
             "SELECT id, category, file_path, file_hash, file_modified_at, ingestion_status,
                     ocr_text, extracted_json, confidence_score, invoice_number, invoice_date,
                     due_date, counterparty_name, total_amount, currency, tax_amount, net_amount,
-                    status, paid_at, document_language, tags, created_at, updated_at
+                    status, paid_at, send_date, document_language, tags, created_at, updated_at
              FROM invoices WHERE id = ?1",
         )?;
 
@@ -130,10 +141,11 @@ impl Database {
                 net_amount: row.get(16)?,
                 status: row.get(17)?,
                 paid_at: row.get(18)?,
-                document_language: row.get(19)?,
-                tags: parse_tags_json(row.get::<_, String>(20)?),
-                created_at: row.get(21)?,
-                updated_at: row.get(22)?,
+                send_date: row.get(19)?,
+                document_language: row.get(20)?,
+                tags: parse_tags_json(row.get::<_, String>(21)?),
+                created_at: row.get(22)?,
+                updated_at: row.get(23)?,
             })
         })
         .optional()
@@ -144,7 +156,7 @@ impl Database {
             "SELECT id, category, file_path, file_hash, file_modified_at, ingestion_status,
                     ocr_text, extracted_json, confidence_score, invoice_number, invoice_date,
                     due_date, counterparty_name, total_amount, currency, tax_amount, net_amount,
-                    status, paid_at, document_language, tags, created_at, updated_at
+                    status, paid_at, send_date, document_language, tags, created_at, updated_at
              FROM invoices WHERE file_path = ?1",
         )?;
 
@@ -169,10 +181,11 @@ impl Database {
                 net_amount: row.get(16)?,
                 status: row.get(17)?,
                 paid_at: row.get(18)?,
-                document_language: row.get(19)?,
-                tags: parse_tags_json(row.get::<_, String>(20)?),
-                created_at: row.get(21)?,
-                updated_at: row.get(22)?,
+                send_date: row.get(19)?,
+                document_language: row.get(20)?,
+                tags: parse_tags_json(row.get::<_, String>(21)?),
+                created_at: row.get(22)?,
+                updated_at: row.get(23)?,
             })
         })
         .optional()
@@ -183,7 +196,7 @@ impl Database {
             "SELECT id, category, file_path, file_hash, file_modified_at, ingestion_status,
                     ocr_text, extracted_json, confidence_score, invoice_number, invoice_date,
                     due_date, counterparty_name, total_amount, currency, tax_amount, net_amount,
-                    status, paid_at, document_language, tags, created_at, updated_at
+                    status, paid_at, send_date, document_language, tags, created_at, updated_at
              FROM invoices
              WHERE file_hash = ?1
              ORDER BY updated_at DESC
@@ -211,10 +224,11 @@ impl Database {
                 net_amount: row.get(16)?,
                 status: row.get(17)?,
                 paid_at: row.get(18)?,
-                document_language: row.get(19)?,
-                tags: parse_tags_json(row.get::<_, String>(20)?),
-                created_at: row.get(21)?,
-                updated_at: row.get(22)?,
+                send_date: row.get(19)?,
+                document_language: row.get(20)?,
+                tags: parse_tags_json(row.get::<_, String>(21)?),
+                created_at: row.get(22)?,
+                updated_at: row.get(23)?,
             })
         })
         .optional()
@@ -379,6 +393,7 @@ impl Database {
         let mut stmt = self.conn.prepare(
             "SELECT customers.id,
                     customers.name,
+                    customers.normalized_name,
                     customers.general_email,
                     customers.first_invoice_date,
                     customers.last_invoice_date,
@@ -400,14 +415,15 @@ impl Database {
             Ok(CustomerSummary {
                 id: row.get(0)?,
                 name: row.get(1)?,
-                general_email: row.get(2)?,
-                first_invoice_date: row.get(3)?,
-                last_invoice_date: row.get(4)?,
-                invoice_count: row.get(5)?,
-                contact_count: row.get(6)?,
-                lifetime_value: row.get(7)?,
-                avg_monthly_revenue: row.get(8)?,
-                active_months: row.get(9)?,
+                normalized_name: row.get(2)?,
+                general_email: row.get(3)?,
+                first_invoice_date: row.get(4)?,
+                last_invoice_date: row.get(5)?,
+                invoice_count: row.get(6)?,
+                contact_count: row.get(7)?,
+                lifetime_value: row.get(8)?,
+                avg_monthly_revenue: row.get(9)?,
+                active_months: row.get(10)?,
             })
         })?;
 
@@ -519,6 +535,115 @@ impl Database {
         self.conn.execute(
             "DELETE FROM customers WHERE normalized_name = ?1",
             params![normalized_name],
+        )?;
+        Ok(())
+    }
+
+    pub fn get_email_templates(&self) -> SqlResult<Vec<EmailTemplate>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, name, subject, body, created_at, updated_at
+             FROM email_templates
+             ORDER BY LOWER(name) ASC, created_at ASC",
+        )?;
+
+        let rows = stmt.query_map([], |row| {
+            Ok(EmailTemplate {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                subject: row.get(2)?,
+                body: row.get(3)?,
+                created_at: row.get(4)?,
+                updated_at: row.get(5)?,
+            })
+        })?;
+
+        rows.collect()
+    }
+
+    pub fn upsert_email_template(&self, template: &EmailTemplate) -> SqlResult<()> {
+        self.conn.execute(
+            "INSERT INTO email_templates (id, name, subject, body, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+             ON CONFLICT(id) DO UPDATE SET
+                name = excluded.name,
+                subject = excluded.subject,
+                body = excluded.body,
+                updated_at = excluded.updated_at",
+            params![
+                template.id,
+                template.name,
+                template.subject,
+                template.body,
+                template.created_at,
+                template.updated_at,
+            ],
+        )?;
+        Ok(())
+    }
+
+    pub fn delete_email_template(&self, template_id: &str) -> SqlResult<()> {
+        self.conn
+            .execute("DELETE FROM email_templates WHERE id = ?1", params![template_id])?;
+        Ok(())
+    }
+
+    pub fn get_revenue_email_invoice_options(&self) -> SqlResult<Vec<EmailInvoiceOption>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT invoices.id,
+                    COALESCE(NULLIF(counterparty.override_value, ''), invoices.counterparty_name) AS customer_name,
+                    COALESCE(NULLIF(number_override.override_value, ''), invoices.invoice_number) AS invoice_number,
+                    COALESCE(NULLIF(date_override.override_value, ''), invoices.invoice_date) AS invoice_date,
+                    COALESCE(NULLIF(amount_override.override_value, ''), invoices.total_amount) AS total_amount,
+                    invoices.currency,
+                    COALESCE(NULLIF(status_override.override_value, ''), invoices.status) AS status,
+                    invoices.file_path
+             FROM invoices
+             LEFT JOIN invoice_overrides counterparty
+               ON counterparty.invoice_id = invoices.id AND counterparty.field_name = 'counterparty_name'
+             LEFT JOIN invoice_overrides number_override
+               ON number_override.invoice_id = invoices.id AND number_override.field_name = 'invoice_number'
+             LEFT JOIN invoice_overrides date_override
+               ON date_override.invoice_id = invoices.id AND date_override.field_name = 'invoice_date'
+             LEFT JOIN invoice_overrides amount_override
+               ON amount_override.invoice_id = invoices.id AND amount_override.field_name = 'total_amount'
+             LEFT JOIN invoice_overrides status_override
+               ON status_override.invoice_id = invoices.id AND status_override.field_name = 'status'
+             WHERE invoices.category = 'revenue'
+             ORDER BY COALESCE(NULLIF(date_override.override_value, ''), invoices.invoice_date) DESC,
+                      invoices.created_at DESC",
+        )?;
+
+        let rows = stmt.query_map([], |row| {
+            let file_path: Option<String> = row.get(7)?;
+            let file_name = file_path.as_deref().and_then(|path| {
+                std::path::Path::new(path)
+                    .file_name()
+                    .map(|value| value.to_string_lossy().to_string())
+            });
+
+            Ok(EmailInvoiceOption {
+                id: row.get(0)?,
+                customer_id: None,
+                customer_name: row.get(1)?,
+                invoice_number: row.get(2)?,
+                invoice_date: row.get(3)?,
+                total_amount: row.get(4)?,
+                currency: row.get(5)?,
+                status: row.get(6)?,
+                file_name,
+                file_path,
+            })
+        })?;
+
+        rows.collect()
+    }
+
+    pub fn set_invoice_send_date_by_path(&self, file_path: &str, send_date: &str) -> SqlResult<()> {
+        self.conn.execute(
+            "UPDATE invoices
+             SET send_date = ?1, updated_at = ?2
+             WHERE file_path = ?3",
+            params![send_date, now_rfc3339(), file_path],
         )?;
         Ok(())
     }
