@@ -6,6 +6,8 @@ billly with 3 l
 
 ## Build
 
+It runs build.sh
+
 ```bash
 npm run build:adhoc-dmg
 ```
