@@ -84,17 +84,47 @@ function formatCurrency(value) {
     }).format(amount);
 }
 
-function escapeHtml(value) {
-    return String(value ?? '')
-        .replaceAll('&', '&amp;')
-        .replaceAll('<', '&lt;')
-        .replaceAll('>', '&gt;');
-}
-
 function getErrorMessage(error) {
     if (typeof error === 'string') return error;
     if (error && typeof error.message === 'string') return error.message;
     return 'Unknown error';
+}
+
+function createTextNode(tagName, className, text) {
+    const node = document.createElement(tagName);
+    if (className) {
+        node.className = className;
+    }
+    node.textContent = text;
+    return node;
+}
+
+function createEmptyTableRow(colspan, text) {
+    const row = document.createElement('tr');
+    const cell = document.createElement('td');
+    cell.colSpan = colspan;
+    cell.className = 'muted';
+    cell.textContent = text;
+    row.appendChild(cell);
+    return row;
+}
+
+function createStatusToggle(id, status) {
+    const toggle = document.createElement('div');
+    toggle.className = 'status-toggle';
+    toggle.dataset.id = id;
+
+    ['open', 'paid'].forEach(option => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'status-option';
+        button.classList.toggle('active', status === option);
+        button.dataset.status = option;
+        button.textContent = option === 'open' ? 'Open' : 'Paid';
+        toggle.appendChild(button);
+    });
+
+    return toggle;
 }
 
 const MONTH_NAMES = [
@@ -422,7 +452,7 @@ function renderKpis(stats, yearLabel, monthLabel) {
     ];
 
     const container = $('#kpi-grid');
-    container.innerHTML = '';
+    container.replaceChildren();
     kpis.forEach(kpi => {
         const card = document.createElement('div');
         card.className = 'kpi';
@@ -437,16 +467,16 @@ function renderKpis(stats, yearLabel, monthLabel) {
                       ? 'value positive'
                       : 'value negative'
                 : 'value';
-        card.innerHTML = `<div class="label">${kpi.label}</div><div class="${valueClass}">${kpi.value}</div>`;
+        card.append(createTextNode('div', 'label', kpi.label), createTextNode('div', valueClass, kpi.value));
         container.appendChild(card);
     });
 }
 
 function renderDashboardInvoiceList(selector, items, emptyText = 'No data') {
     const list = $(selector);
-    list.innerHTML = '';
+    list.replaceChildren();
     if (!items.length) {
-        list.innerHTML = `<li class="muted">${emptyText}</li>`;
+        list.appendChild(createTextNode('li', 'muted', emptyText));
         return;
     }
     items.forEach(item => {
@@ -462,9 +492,9 @@ function renderDashboardInvoiceList(selector, items, emptyText = 'No data') {
 
 function renderAggregateList(selector, items, emptyText = 'No data', { absolute = false } = {}) {
     const list = $(selector);
-    list.innerHTML = '';
+    list.replaceChildren();
     if (!items.length) {
-        list.innerHTML = `<li class="muted">${emptyText}</li>`;
+        list.appendChild(createTextNode('li', 'muted', emptyText));
         return;
     }
     items.forEach(item => {
@@ -554,7 +584,7 @@ async function loadInvoiceYears() {
     const currentYear = String(new Date().getFullYear());
     const yearOptions = years.includes(currentYear) ? [...years] : [currentYear, ...years];
     const current = state.invoiceYear || select.value || currentYear;
-    select.innerHTML = '';
+    select.replaceChildren();
     const allOption = document.createElement('option');
     allOption.value = 'all';
     allOption.textContent = 'All';
@@ -594,7 +624,7 @@ async function loadDashboardYears() {
     const previous = select.value;
     const yearOptions = years.length ? years : [currentYear];
 
-    select.innerHTML = '';
+    select.replaceChildren();
     yearOptions.forEach(year => {
         const option = document.createElement('option');
         option.value = year;
@@ -614,10 +644,10 @@ async function loadDashboardYears() {
 function renderInvoiceList() {
     const tbody = $('#invoice-list');
     const items = sortItems(state.invoiceItems, 'invoices');
-    tbody.innerHTML = '';
+    tbody.replaceChildren();
     updateSortHeaders();
     if (!items.length) {
-        tbody.innerHTML = `<tr><td colspan="5" class="muted">No invoices</td></tr>`;
+        tbody.appendChild(createEmptyTableRow(5, 'No invoices'));
         return;
     }
 
@@ -625,18 +655,13 @@ function renderInvoiceList() {
         const row = document.createElement('tr');
         row.dataset.id = item.id;
         row.classList.toggle('selected', item.id === state.selectedInvoiceId);
-        row.innerHTML = `
-      <td>${item.invoice_date || '-'}</td>
-      <td>${item.counterparty_name || 'Unknown'}</td>
-      <td>${formatCurrency(item.total_amount)}</td>
-      <td>
-        <div class="status-toggle" data-id="${item.id}">
-          <button class="status-option ${item.status === 'open' ? 'active' : ''}" data-status="open">Open</button>
-          <button class="status-option ${item.status === 'paid' ? 'active' : ''}" data-status="paid">Paid</button>
-        </div>
-      </td>
-      <td>${item.file_path ? item.file_path.split('/').pop() : '-'}</td>
-    `;
+        const dateCell = createTextNode('td', '', item.invoice_date || '-');
+        const counterpartyCell = createTextNode('td', '', item.counterparty_name || 'Unknown');
+        const amountCell = createTextNode('td', '', formatCurrency(item.total_amount));
+        const statusCell = document.createElement('td');
+        statusCell.appendChild(createStatusToggle(item.id, item.status));
+        const fileCell = createTextNode('td', '', item.file_path ? item.file_path.split('/').pop() : '-');
+        row.append(dateCell, counterpartyCell, amountCell, statusCell, fileCell);
         row.addEventListener('click', () => selectInvoice(item.id));
         row.querySelectorAll('.status-option').forEach(button => {
             button.addEventListener('click', async event => {
@@ -687,30 +712,31 @@ function renderInvoiceDetail(detail) {
         ['confidence_score', 'Confidence Score', true],
     ];
 
-    container.innerHTML = '';
+    container.replaceChildren();
     fields.forEach(([key, label, readOnly]) => {
         const row = document.createElement('div');
         row.className = 'detail-row';
-        row.innerHTML = `
-      <span>${label}</span>
-      <div class="detail-value">
-        <input data-field="${key}" value="${invoice[key] ?? ''}" ${readOnly ? 'readonly' : ''} />
-      </div>
-    `;
+        const labelNode = createTextNode('span', '', label);
+        const valueNode = document.createElement('div');
+        valueNode.className = 'detail-value';
+        const input = document.createElement('input');
+        input.dataset.field = key;
+        input.value = invoice[key] ?? '';
+        if (readOnly) {
+            input.readOnly = true;
+        }
+        valueNode.appendChild(input);
+        row.append(labelNode, valueNode);
         container.appendChild(row);
     });
 
     const statusRow = document.createElement('div');
     statusRow.className = 'detail-row';
-    statusRow.innerHTML = `
-    <span>Status</span>
-    <div class="detail-value">
-      <div class="status-toggle" data-id="${invoice.id}">
-        <button class="status-option ${invoice.status === 'open' ? 'active' : ''}" data-status="open">Open</button>
-        <button class="status-option ${invoice.status === 'paid' ? 'active' : ''}" data-status="paid">Paid</button>
-      </div>
-    </div>
-  `;
+    const statusLabel = createTextNode('span', '', 'Status');
+    const statusValue = document.createElement('div');
+    statusValue.className = 'detail-value';
+    statusValue.appendChild(createStatusToggle(invoice.id, invoice.status));
+    statusRow.append(statusLabel, statusValue);
     container.appendChild(statusRow);
 
     statusRow.querySelectorAll('.status-option').forEach(button => {
@@ -735,18 +761,15 @@ function renderInvoiceDetail(detail) {
 
     const ocrBlock = document.createElement('div');
     ocrBlock.className = 'detail-block';
-    ocrBlock.innerHTML = `
-    <h4>OCR / Extracted Text</h4>
-    <pre>${escapeHtml(invoice.ocr_text || 'No text stored')}<\/pre>
-  `;
+    ocrBlock.append(
+        createTextNode('h4', '', 'OCR / Extracted Text'),
+        createTextNode('pre', '', invoice.ocr_text || 'No text stored')
+    );
     container.appendChild(ocrBlock);
 
     const jsonBlock = document.createElement('div');
     jsonBlock.className = 'detail-block';
-    jsonBlock.innerHTML = `
-    <h4>Extracted JSON</h4>
-    <pre>${escapeHtml(invoice.extracted_json || '{}')}<\/pre>
-  `;
+    jsonBlock.append(createTextNode('h4', '', 'Extracted JSON'), createTextNode('pre', '', invoice.extracted_json || '{}'));
     container.appendChild(jsonBlock);
 
     container.querySelectorAll('input[data-field]').forEach(input => {
@@ -832,7 +855,7 @@ async function saveInvoiceTags(invoiceId, tags) {
 
 function renderInvoicePlaceholder() {
     const container = $('#detail-body');
-    container.innerHTML = `<p class="muted">Select an invoice from the list.</p>`;
+    container.replaceChildren(createTextNode('p', 'muted', 'Select an invoice from the list.'));
 }
 
 async function loadCustomers(options = {}) {
@@ -866,10 +889,10 @@ async function loadCustomers(options = {}) {
 function renderCustomerList() {
     const tbody = $('#customer-list');
     const items = sortItems(state.customerItems, 'customers');
-    tbody.innerHTML = '';
+    tbody.replaceChildren();
     updateSortHeaders();
     if (!items.length) {
-        tbody.innerHTML = `<tr><td colspan="5" class="muted">No customers yet</td></tr>`;
+        tbody.appendChild(createEmptyTableRow(5, 'No customers yet'));
         return;
     }
 
@@ -877,13 +900,13 @@ function renderCustomerList() {
         const row = document.createElement('tr');
         row.dataset.id = item.id;
         row.classList.toggle('selected', item.id === state.selectedCustomerId);
-        row.innerHTML = `
-      <td>${escapeHtml(item.name || 'Unknown')}</td>
-      <td>${escapeHtml(item.first_invoice_date || '-')}</td>
-      <td>${escapeHtml(item.last_invoice_date || '-')}</td>
-      <td>${formatCurrency(item.lifetime_value)}</td>
-      <td>${formatDaysSinceLastInvoice(item.last_invoice_date)}</td>
-    `;
+        row.append(
+            createTextNode('td', '', item.name || 'Unknown'),
+            createTextNode('td', '', item.first_invoice_date || '-'),
+            createTextNode('td', '', item.last_invoice_date || '-'),
+            createTextNode('td', '', formatCurrency(item.lifetime_value)),
+            createTextNode('td', '', formatDaysSinceLastInvoice(item.last_invoice_date))
+        );
         row.addEventListener('click', () => selectCustomer(item.id));
         tbody.appendChild(row);
     });
@@ -901,7 +924,7 @@ async function selectCustomer(id) {
 
 function renderCustomerPlaceholder() {
     const container = $('#customer-detail-body');
-    container.innerHTML = `<p class="muted">Select a customer from the list.</p>`;
+    container.replaceChildren(createTextNode('p', 'muted', 'Select a customer from the list.'));
 }
 
 function renderCustomerDetail(detail) {
@@ -909,26 +932,20 @@ function renderCustomerDetail(detail) {
     const customer = detail.customer;
     const contacts = detail.contacts || [];
 
-    container.innerHTML = `
-      <div class="detail-metrics">
-        <div class="detail-metric-card">
-          <span class="detail-metric-label">Lifetime Value</span>
-          <strong>${formatCurrency(customer.lifetime_value)}</strong>
-        </div>
-        <div class="detail-metric-card">
-          <span class="detail-metric-label">Days Since Last Invoice</span>
-          <strong>${formatDaysSinceLastInvoice(customer.last_invoice_date)}</strong>
-        </div>
-        <div class="detail-metric-card">
-          <span class="detail-metric-label">Relationship</span>
-          <strong>${formatCustomerAge(customer.active_months)}</strong>
-        </div>
-        <div class="detail-metric-card">
-          <span class="detail-metric-label">Invoices</span>
-          <strong>${customer.invoice_count || 0}</strong>
-        </div>
-      </div>
-    `;
+    const metrics = document.createElement('div');
+    metrics.className = 'detail-metrics';
+    [
+        ['Lifetime Value', formatCurrency(customer.lifetime_value)],
+        ['Days Since Last Invoice', formatDaysSinceLastInvoice(customer.last_invoice_date)],
+        ['Relationship', formatCustomerAge(customer.active_months)],
+        ['Invoices', customer.invoice_count || 0],
+    ].forEach(([label, value]) => {
+        const card = document.createElement('div');
+        card.className = 'detail-metric-card';
+        card.append(createTextNode('span', 'detail-metric-label', label), createTextNode('strong', '', value));
+        metrics.appendChild(card);
+    });
+    container.replaceChildren(metrics);
 
     container.appendChild(createCustomerFieldRow('Customer Name', 'name', customer.name || ''));
     container.appendChild(createCustomerFieldRow('Main Email', 'general_email', customer.general_email || ''));
@@ -940,12 +957,10 @@ function renderCustomerDetail(detail) {
 
     const contactsBlock = document.createElement('div');
     contactsBlock.className = 'detail-block detail-contacts-block';
-    contactsBlock.innerHTML = `
-      <div class="detail-block-header">
-        <h4>Contacts</h4>
-        <span class="muted">${contacts.length} saved</span>
-      </div>
-    `;
+    const contactsHeader = document.createElement('div');
+    contactsHeader.className = 'detail-block-header';
+    contactsHeader.append(createTextNode('h4', '', 'Contacts'), createTextNode('span', 'muted', `${contacts.length} saved`));
+    contactsBlock.appendChild(contactsHeader);
 
     const contactsList = document.createElement('div');
     contactsList.className = 'contact-list';
@@ -1006,10 +1021,7 @@ function createCustomerFieldRow(label, field, value, multiline = false) {
 function createCustomerReadonlyRow(label, value) {
     const row = document.createElement('div');
     row.className = 'detail-row';
-    row.innerHTML = `
-      <span>${escapeHtml(label)}</span>
-      <div class="detail-value detail-value-static">${escapeHtml(value)}</div>
-    `;
+    row.append(createTextNode('span', '', label), createTextNode('div', 'detail-value detail-value-static', value));
     return row;
 }
 
@@ -1125,9 +1137,9 @@ function renderEmailRecipientList() {
             .some(value => String(value).toLowerCase().includes(query));
     });
 
-    container.innerHTML = '';
+    container.replaceChildren();
     if (!recipients.length) {
-        container.innerHTML = `<p class="muted">No recipients found.</p>`;
+        container.appendChild(createTextNode('p', 'muted', 'No recipients found.'));
         return;
     }
 
@@ -1138,7 +1150,7 @@ function renderEmailRecipientList() {
             currentGroup = recipient.customer_name;
             const group = document.createElement('div');
             group.className = 'email-recipient-group';
-            group.innerHTML = `<div class="email-recipient-group-title">${escapeHtml(recipient.customer_name)}</div>`;
+            group.appendChild(createTextNode('div', 'email-recipient-group-title', recipient.customer_name));
             groupList = document.createElement('div');
             groupList.className = 'email-recipient-group-list';
             group.appendChild(groupList);
@@ -1149,13 +1161,10 @@ function renderEmailRecipientList() {
         button.type = 'button';
         button.className = 'email-recipient-button';
         button.classList.toggle('active', recipient.id === state.selectedEmailRecipientId);
-        button.innerHTML = `
-            <span class="email-recipient-copy">
-                <strong>${escapeHtml(recipient.display_name)}</strong>
-                <span>${escapeHtml(recipient.email)}</span>
-            </span>
-            <span class="email-recipient-kind">${escapeHtml(recipient.kind)}</span>
-        `;
+        const copy = document.createElement('span');
+        copy.className = 'email-recipient-copy';
+        copy.append(createTextNode('strong', '', recipient.display_name), createTextNode('span', '', recipient.email));
+        button.append(copy, createTextNode('span', 'email-recipient-kind', recipient.kind));
         button.addEventListener('click', () => selectEmailRecipient(recipient.id));
         groupList.appendChild(button);
     });
@@ -1172,9 +1181,9 @@ function selectEmailRecipient(recipientId) {
 
 function renderEmailTemplateList() {
     const container = $('#email-template-list');
-    container.innerHTML = '';
+    container.replaceChildren();
     if (!state.emailTemplates.length) {
-        container.innerHTML = `<p class="muted">No templates yet. Create one to reuse your invoice emails.</p>`;
+        container.appendChild(createTextNode('p', 'muted', 'No templates yet. Create one to reuse your invoice emails.'));
         return;
     }
 
@@ -1183,10 +1192,7 @@ function renderEmailTemplateList() {
         button.type = 'button';
         button.className = 'email-template-button';
         button.classList.toggle('active', template.id === state.selectedEmailTemplateId);
-        button.innerHTML = `
-            <strong>${escapeHtml(template.name)}</strong>
-            <span>${escapeHtml(template.subject || 'No subject yet')}</span>
-        `;
+        button.append(createTextNode('strong', '', template.name), createTextNode('span', '', template.subject || 'No subject yet'));
         button.addEventListener('click', () => selectEmailTemplate(template.id));
         container.appendChild(button);
     });
@@ -1248,7 +1254,7 @@ function activateCustomEmailDraft() {
 function renderEmailTemplateSelect() {
     const select = $('#email-template-select');
     const current = state.selectedEmailTemplateId;
-    select.innerHTML = '';
+    select.replaceChildren();
 
     const customOption = document.createElement('option');
     customOption.value = '';
@@ -1288,7 +1294,7 @@ function populateEmailInvoiceSelect() {
     const invoices = getFilteredEmailInvoices();
     const previous = select.value;
 
-    select.innerHTML = '';
+    select.replaceChildren();
     if (!invoices.length) {
         const option = document.createElement('option');
         option.value = '';

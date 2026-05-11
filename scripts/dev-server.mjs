@@ -21,6 +21,9 @@ const mimeTypes = {
 
 function resolvePath(urlPath) {
   if (urlPath === "/") return path.join(root, "index.html");
+  if (urlPath === "/public/vendor/chart.umd.js") {
+    return path.join(root, "node_modules", "chart.js", "dist", "chart.umd.js");
+  }
   if (urlPath.startsWith("/src/")) return path.join(root, urlPath);
   if (urlPath.startsWith("/public/")) return path.join(root, urlPath);
   if (urlPath === "/logo.png") return path.join(root, "public", "logo.png");

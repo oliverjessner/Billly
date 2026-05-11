@@ -25,6 +25,15 @@ async function copyDir(src, dest) {
   }
 }
 
+async function copyChartBundle(destRoot) {
+  const vendorDir = path.join(destRoot, "public", "vendor");
+  await fs.mkdir(vendorDir, { recursive: true });
+  await fs.copyFile(
+    path.join(root, "node_modules", "chart.js", "dist", "chart.umd.js"),
+    path.join(vendorDir, "chart.umd.js")
+  );
+}
+
 async function build() {
   await cleanDir(dist);
   await fs.copyFile(path.join(root, "index.html"), path.join(dist, "index.html"));
@@ -32,6 +41,7 @@ async function build() {
   await fs.copyFile(path.join(root, "package.json"), path.join(dist, "package.json"));
   await copyDir(path.join(root, "src"), path.join(dist, "src"));
   await copyDir(path.join(root, "public"), path.join(dist, "public"));
+  await copyChartBundle(dist);
 }
 
 build().catch((err) => {

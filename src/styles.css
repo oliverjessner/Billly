@@ -1197,6 +1197,10 @@ body {
     line-height: 1.45;
 }
 
+.field textarea.textarea-fixed {
+    resize: none;
+}
+
 .field input:focus-visible,
 .field select:focus-visible,
 .field textarea:focus-visible {
