@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use chrono::{Datelike, NaiveDate, Utc};
 use serde::Deserialize;
@@ -171,7 +171,16 @@ pub(crate) fn sync_generated_customers(state: &State<'_, AppState>) -> Result<()
         }
     }
 
+    let active_normalized_names: HashSet<String> = aggregates.keys().cloned().collect();
     let db = state.db.lock().map_err(|_| "DB lock".to_string())?;
+    let existing_customers = db.get_customer_summaries().map_err(|e| e.to_string())?;
+    for customer in existing_customers {
+        if !active_normalized_names.contains(&customer.normalized_name) {
+            db.delete_customer_by_normalized_name(&customer.normalized_name)
+                .map_err(|e| e.to_string())?;
+        }
+    }
+
     for (normalized_name, aggregate) in aggregates {
         let existing = db
             .get_customer_by_normalized_name(&normalized_name)

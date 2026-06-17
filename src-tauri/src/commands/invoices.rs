@@ -1,3 +1,4 @@
+use crate::commands::customers::sync_generated_customers;
 use crate::models::{normalize_payable_tags, InvoiceDetail, InvoiceOverride, InvoiceSummary};
 use crate::services::processor::process_invoice;
 use crate::services::state::AppState;
@@ -18,6 +19,13 @@ pub struct UpdateInvoicePayload {
 pub struct UpdateInvoiceTagsPayload {
     pub invoice_id: String,
     pub tags: Vec<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateInvoiceCategoryPayload {
+    pub invoice_id: String,
+    pub category: String,
 }
 
 #[tauri::command]
@@ -93,6 +101,29 @@ pub async fn update_invoice_tags(payload: UpdateInvoiceTagsPayload, state: State
     let tags = normalize_payable_tags(payload.tags);
     db.set_invoice_tags(&payload.invoice_id, &tags)
         .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn update_invoice_category(
+    payload: UpdateInvoiceCategoryPayload,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    if !matches!(payload.category.as_str(), "revenue" | "payable") {
+        return Err("Invalid invoice category".to_string());
+    }
+
+    {
+        let db = state.db.lock().map_err(|_| "DB lock".to_string())?;
+        let updated = db
+            .update_invoice_category(&payload.invoice_id, &payload.category)
+            .map_err(|e| e.to_string())?;
+        if !updated {
+            return Err("Invoice not found".to_string());
+        }
+    }
+
+    sync_generated_customers(&state)?;
     Ok(())
 }
 

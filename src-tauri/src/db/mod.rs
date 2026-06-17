@@ -714,6 +714,16 @@ impl Database {
         Ok(())
     }
 
+    pub fn update_invoice_category(&self, invoice_id: &str, category: &str) -> SqlResult<bool> {
+        let updated = self.conn.execute(
+            "UPDATE invoices
+             SET category = ?2, updated_at = datetime('now')
+             WHERE id = ?1",
+            params![invoice_id, category],
+        )?;
+        Ok(updated > 0)
+    }
+
     pub fn delete_invoice(&mut self, invoice_id: &str) -> SqlResult<()> {
         let tx = self.conn.transaction()?;
         tx.execute(

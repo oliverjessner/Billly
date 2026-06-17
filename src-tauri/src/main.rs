@@ -117,6 +117,7 @@ fn main() {
             commands::invoices::get_invoice_detail,
             commands::invoices::update_invoice_field,
             commands::invoices::update_invoice_tags,
+            commands::invoices::update_invoice_category,
             commands::invoices::clear_overrides,
             commands::invoices::clear_override,
             commands::invoices::delete_invoice,

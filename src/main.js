@@ -127,6 +127,17 @@ function createStatusToggle(id, status) {
     return toggle;
 }
 
+function getInvoiceCategoryLabel(category) {
+    return category === 'payable' ? 'Payables' : 'Revenue';
+}
+
+function setActiveInvoiceCategory(category) {
+    state.currentCategory = category;
+    $$('#invoice-category .segment').forEach(segment => {
+        segment.classList.toggle('active', segment.dataset.category === category);
+    });
+}
+
 const MONTH_NAMES = [
     'January',
     'February',
@@ -713,6 +724,7 @@ function renderInvoiceDetail(detail) {
     ];
 
     container.replaceChildren();
+    container.appendChild(createInvoiceCategoryRow(invoice));
     fields.forEach(([key, label, readOnly]) => {
         const row = document.createElement('div');
         row.className = 'detail-row';
@@ -789,6 +801,73 @@ function renderInvoiceDetail(detail) {
             await loadDashboard();
         });
     });
+}
+
+function createInvoiceCategoryRow(invoice) {
+    const row = document.createElement('div');
+    row.className = 'detail-row detail-row-category';
+
+    const label = createTextNode('span', '', 'Category');
+    const value = document.createElement('div');
+    value.className = 'detail-value category-switch-field';
+
+    const revenueLabel = createTextNode('span', 'category-switch-label', 'Revenue');
+    const payableLabel = createTextNode('span', 'category-switch-label', 'Payables');
+
+    const switchLabel = document.createElement('label');
+    switchLabel.className = 'category-switch';
+
+    const input = document.createElement('input');
+    input.type = 'checkbox';
+    input.checked = invoice.category === 'payable';
+    input.setAttribute('role', 'switch');
+    input.setAttribute('aria-label', 'Move invoice between Revenue and Payables');
+
+    const track = document.createElement('span');
+    track.className = 'category-switch-track';
+
+    input.addEventListener('change', async () => {
+        const category = input.checked ? 'payable' : 'revenue';
+        if (category === invoice.category) {
+            return;
+        }
+
+        input.disabled = true;
+        try {
+            await moveInvoiceToCategory(invoice.id, category);
+        } catch (error) {
+            console.error(error);
+            input.checked = invoice.category === 'payable';
+            setStatus(getErrorMessage(error), false);
+        } finally {
+            input.disabled = false;
+        }
+    });
+
+    switchLabel.append(input, track);
+    value.append(revenueLabel, switchLabel, payableLabel);
+    row.append(label, value);
+    return row;
+}
+
+async function moveInvoiceToCategory(invoiceId, category) {
+    await invoke('update_invoice_category', {
+        payload: {
+            invoiceId,
+            category,
+        },
+    });
+
+    state.selectedInvoiceId = invoiceId;
+    setActiveInvoiceCategory(category);
+    await loadDashboardYears();
+    await loadDashboard();
+    await loadInvoiceYears();
+    await loadInvoices();
+    await selectInvoice(invoiceId);
+    await loadCustomers();
+    await loadEmails();
+    setStatus(`Invoice moved to ${getInvoiceCategoryLabel(category)}`, true);
 }
 
 function createPayableTagsRow(invoice) {
@@ -1472,11 +1551,11 @@ async function init() {
         });
     });
 
-    $$('.segment').forEach(segment => {
+    $$('#invoice-category .segment').forEach(segment => {
         segment.addEventListener('click', async () => {
-            $$('.segment').forEach(s => s.classList.remove('active'));
-            segment.classList.add('active');
-            state.currentCategory = segment.dataset.category;
+            setActiveInvoiceCategory(segment.dataset.category);
+            state.selectedInvoiceId = null;
+            renderInvoicePlaceholder();
             await loadInvoiceYears();
             await loadInvoices();
         });
