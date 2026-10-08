@@ -34,6 +34,15 @@ async function copyChartBundle(destRoot) {
   );
 }
 
+async function copyDesignSystemBundle(destRoot) {
+  const packageDir = path.join(root, "node_modules", "oj-designsystem");
+  const vendorDir = path.join(destRoot, "public", "vendor", "oj-designsystem");
+  await copyDir(path.join(packageDir, "dist"), vendorDir);
+  for (const filename of ["LICENSE", "THIRD-PARTY-NOTICES.md"]) {
+    await fs.copyFile(path.join(packageDir, filename), path.join(vendorDir, filename));
+  }
+}
+
 async function build() {
   await cleanDir(dist);
   await fs.copyFile(path.join(root, "index.html"), path.join(dist, "index.html"));
@@ -42,6 +51,7 @@ async function build() {
   await copyDir(path.join(root, "src"), path.join(dist, "src"));
   await copyDir(path.join(root, "public"), path.join(dist, "public"));
   await copyChartBundle(dist);
+  await copyDesignSystemBundle(dist);
 }
 
 build().catch((err) => {

@@ -1,17 +1,19 @@
 {
     "name": "billly",
     "private": true,
-    "version": "0.3.2",
+    "version": "0.4.0",
     "type": "module",
     "scripts": {
         "dev": "node scripts/dev-server.mjs",
         "build": "node scripts/build.mjs",
-        "tauri": "tauri",
+        "tauri": "tauri dev",
+        "tauri:cli": "tauri",
         "build:adhoc-dmg": "sh publish.sh"
     },
     "dependencies": {
         "@tauri-apps/api": "^2.0.0",
-        "chart.js": "4.5.1"
+        "chart.js": "4.5.1",
+        "oj-designsystem": "0.1.0"
     },
     "devDependencies": {
         "@tauri-apps/cli": "^2.0.0"

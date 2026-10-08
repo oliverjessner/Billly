@@ -1,3 +1,5 @@
+import { initDropdowns, initTabs } from '/public/vendor/oj-designsystem/index.js';
+
 const tauri = window.__TAURI__;
 const invoke =
     tauri?.core?.invoke ??
@@ -43,14 +45,15 @@ const $$ = selector => Array.from(document.querySelectorAll(selector));
 function setStatus(text, ok = true) {
     const indicator = $('#status-indicator');
     indicator.querySelector('.text').textContent = text;
-    indicator.querySelector('.dot').style.background = ok ? 'var(--ok)' : 'var(--danger)';
+    indicator.classList.toggle('oj-status-success', ok);
+    indicator.classList.toggle('oj-status-danger', !ok);
 }
 
 function setPillState(element, text, tone = 'neutral') {
     if (!element) return;
     element.textContent = text;
-    element.classList.remove('is-success', 'is-warning', 'is-neutral');
-    element.classList.add(`is-${tone}`);
+    element.classList.remove('oj-badge-success', 'oj-badge-warning', 'oj-badge-danger', 'oj-badge-info');
+    if (tone !== 'neutral') element.classList.add(`oj-badge-${tone}`);
 }
 
 function setActiveSettingsSection(section) {
@@ -60,18 +63,12 @@ function setActiveSettingsSection(section) {
             button.classList.toggle('active', button.dataset.settingsSection === section);
         }
     });
-    $$('[data-settings-panel]').forEach(panel => {
-        panel.classList.toggle('hidden', panel.dataset.settingsPanel !== section);
-    });
 }
 
 function setActiveEmailSection(section) {
     state.currentEmailSection = section;
     $$('[data-email-section]').forEach(button => {
         button.classList.toggle('active', button.dataset.emailSection === section);
-    });
-    $$('[data-email-panel]').forEach(panel => {
-        panel.classList.toggle('hidden', panel.dataset.emailPanel !== section);
     });
 }
 
@@ -103,25 +100,34 @@ function createEmptyTableRow(colspan, text) {
     const row = document.createElement('tr');
     const cell = document.createElement('td');
     cell.colSpan = colspan;
-    cell.className = 'muted';
+    cell.className = 'oj-muted';
     cell.textContent = text;
     row.appendChild(cell);
     return row;
 }
 
+let statusToggleCount = 0;
+
 function createStatusToggle(id, status) {
     const toggle = document.createElement('div');
-    toggle.className = 'status-toggle';
+    toggle.className = 'status-toggle oj-segmented';
     toggle.dataset.id = id;
+    toggle.setAttribute('role', 'group');
+    toggle.setAttribute('aria-label', 'Invoice status');
+    toggle.addEventListener('click', event => event.stopPropagation());
+    const groupName = `invoice-status-${++statusToggleCount}`;
 
     ['open', 'paid'].forEach(option => {
-        const button = document.createElement('button');
-        button.type = 'button';
-        button.className = 'status-option';
-        button.classList.toggle('active', status === option);
-        button.dataset.status = option;
-        button.textContent = option === 'open' ? 'Open' : 'Paid';
-        toggle.appendChild(button);
+        const label = document.createElement('label');
+        const input = document.createElement('input');
+        input.type = 'radio';
+        input.name = groupName;
+        input.className = 'status-option';
+        input.checked = status === option;
+        input.value = option;
+        input.dataset.status = option;
+        label.append(input, createTextNode('span', '', option === 'open' ? 'Open' : 'Paid'));
+        toggle.appendChild(label);
     });
 
     return toggle;
@@ -134,7 +140,7 @@ function getInvoiceCategoryLabel(category) {
 function setActiveInvoiceCategory(category) {
     state.currentCategory = category;
     $$('#invoice-category .segment').forEach(segment => {
-        segment.classList.toggle('active', segment.dataset.category === category);
+        segment.checked = segment.dataset.category === category;
     });
 }
 
@@ -153,6 +159,57 @@ const MONTH_NAMES = [
     'December',
 ];
 const PAYABLE_TAG_OPTIONS = ['SaaS', 'Insurance', 'Membership', 'Marketing', 'Domain', 'Rent'];
+
+function setFilterValue(trigger, value) {
+    const menu = trigger.closest('[data-oj-dropdown]').querySelector('[data-oj-dropdown-menu]');
+    const items = Array.from(menu.querySelectorAll('[role="menuitemradio"]'));
+    const selected = items.find(item => item.dataset.ojValue === String(value));
+    if (!selected) return;
+    trigger.value = selected.dataset.ojValue;
+    trigger.querySelector('[data-oj-filter-value]').textContent = selected.querySelector('span').textContent;
+    items.forEach(item => {
+        const checked = item === selected;
+        item.setAttribute('aria-checked', String(checked));
+        item.querySelector('.filter-item-check').hidden = !checked;
+    });
+}
+
+function renderFilterOptions(trigger, options, value) {
+    const menu = trigger.closest('[data-oj-dropdown]').querySelector('[data-oj-dropdown-menu]');
+    const items = options.map(option => {
+        const item = document.createElement('button');
+        item.type = 'button';
+        item.className = 'oj-menu-item';
+        item.setAttribute('role', 'menuitemradio');
+        item.setAttribute('aria-checked', 'false');
+        item.tabIndex = -1;
+        item.dataset.ojValue = String(option.value);
+        const check = document.createElement('i');
+        check.className = 'filter-item-check fa-solid fa-check';
+        check.setAttribute('aria-hidden', 'true');
+        check.hidden = true;
+        item.append(createTextNode('span', '', option.label), check);
+        return item;
+    });
+    menu.replaceChildren(...items);
+    trigger.disabled = !items.length;
+    const selected = options.find(option => String(option.value) === String(value)) || options[0];
+    if (selected) setFilterValue(trigger, selected.value);
+}
+
+function bindFilter(trigger, onChange) {
+    const dropdown = trigger.closest('[data-oj-dropdown]');
+    dropdown.addEventListener('oj:select', async event => {
+        if (event.target !== dropdown || trigger.value === event.detail.value) return;
+        setFilterValue(trigger, event.detail.value);
+        try {
+            await onChange();
+        } catch (error) {
+            console.error(error);
+            setStatus(getErrorMessage(error), false);
+        }
+    });
+}
 
 async function loadAppVersion() {
     const versionText = $('#app-version-text');
@@ -383,6 +440,10 @@ function updateSortHeaders() {
         const sort = state.sorting[table];
         const indicator = button.querySelector('.table-sort-indicator');
         const active = sort?.key === key;
+        const header = button.closest('th');
+        if (header) {
+            header.setAttribute('aria-sort', active ? (sort.direction === 'asc' ? 'ascending' : 'descending') : 'none');
+        }
         button.classList.toggle('is-active', active);
         button.dataset.direction = active ? sort.direction : '';
         if (indicator) {
@@ -466,7 +527,7 @@ function renderKpis(stats, yearLabel, monthLabel) {
     container.replaceChildren();
     kpis.forEach(kpi => {
         const card = document.createElement('div');
-        card.className = 'kpi';
+        card.className = 'kpi oj-panel oj-metric oj-metric-card';
         const numeric = kpi.amount;
         const valueClass =
             kpi.kind && typeof numeric === 'number'
@@ -478,7 +539,10 @@ function renderKpis(stats, yearLabel, monthLabel) {
                       ? 'value positive'
                       : 'value negative'
                 : 'value';
-        card.append(createTextNode('div', 'label', kpi.label), createTextNode('div', valueClass, kpi.value));
+        card.append(
+            createTextNode('div', 'label oj-metric-label', kpi.label),
+            createTextNode('div', `${valueClass} oj-metric-value`, kpi.value)
+        );
         container.appendChild(card);
     });
 }
@@ -487,14 +551,16 @@ function renderDashboardInvoiceList(selector, items, emptyText = 'No data') {
     const list = $(selector);
     list.replaceChildren();
     if (!items.length) {
-        list.appendChild(createTextNode('li', 'muted', emptyText));
+        list.appendChild(createTextNode('li', 'oj-list-item oj-muted', emptyText));
         return;
     }
     items.forEach(item => {
         const li = document.createElement('li');
+        li.className = 'oj-list-item';
         const name = document.createElement('span');
         name.textContent = item.counterparty_name || 'Unknown';
         const amount = document.createElement('span');
+        amount.className = 'oj-mono';
         amount.textContent = formatCurrency(item.total_amount);
         li.append(name, amount);
         list.appendChild(li);
@@ -505,14 +571,16 @@ function renderAggregateList(selector, items, emptyText = 'No data', { absolute 
     const list = $(selector);
     list.replaceChildren();
     if (!items.length) {
-        list.appendChild(createTextNode('li', 'muted', emptyText));
+        list.appendChild(createTextNode('li', 'oj-list-item oj-muted', emptyText));
         return;
     }
     items.forEach(item => {
         const li = document.createElement('li');
+        li.className = 'oj-list-item';
         const label = document.createElement('span');
         label.textContent = item.label || 'Unknown';
         const amount = document.createElement('span');
+        amount.className = 'oj-mono';
         amount.textContent = formatCurrency(absolute ? Math.abs(item.total_amount) : item.total_amount);
         li.append(label, amount);
         list.appendChild(li);
@@ -532,11 +600,37 @@ function renderMetricValue(selector, value, { absolute = false, negativeWhenPosi
     }
 }
 
+function getChartColors() {
+    const scope = $('.app-shell');
+    const styles = getComputedStyle(scope);
+    const probe = document.createElement('span');
+    probe.hidden = true;
+    scope.appendChild(probe);
+    const resolve = token => {
+        probe.style.color = `var(${token})`;
+        return getComputedStyle(probe).color;
+    };
+    const colors = {
+        revenue: resolve('--oj-success'),
+        revenueFill: resolve('--oj-success-soft'),
+        payables: resolve('--oj-danger'),
+        payablesFill: resolve('--oj-danger-soft'),
+        text: resolve('--oj-text'),
+        muted: resolve('--oj-text-muted'),
+        grid: resolve('--oj-border-subtle'),
+        sansFont: styles.getPropertyValue('--oj-font-sans').trim(),
+        monoFont: styles.getPropertyValue('--oj-font-mono').trim(),
+    };
+    probe.remove();
+    return colors;
+}
+
 function renderCharts(stats) {
     if (!Chart) {
         console.error('Chart.js not loaded');
         return;
     }
+    const colors = getChartColors();
     if (!state.charts.monthly) {
         state.charts.monthly = new Chart($('#chart-monthly'), {
             type: 'line',
@@ -546,15 +640,15 @@ function renderCharts(stats) {
                     {
                         label: 'Revenue',
                         data: stats.chart_revenue,
-                        borderColor: '#22c55e',
-                        backgroundColor: 'rgba(34,197,94,0.2)',
+                        borderColor: colors.revenue,
+                        backgroundColor: colors.revenueFill,
                         tension: 0.3,
                     },
                     {
                         label: 'Payables',
                         data: stats.chart_payables,
-                        borderColor: '#ef4444',
-                        backgroundColor: 'rgba(239,68,68,0.2)',
+                        borderColor: colors.payables,
+                        backgroundColor: colors.payablesFill,
                         tension: 0.3,
                     },
                 ],
@@ -563,11 +657,15 @@ function renderCharts(stats) {
                 responsive: true,
                 maintainAspectRatio: false,
                 plugins: {
-                    legend: { labels: { color: '#f3f4f6' }, onClick: () => {} },
+                    legend: { labels: { color: colors.text, font: { family: colors.sansFont } }, onClick: () => {} },
+                    tooltip: {
+                        titleFont: { family: colors.sansFont },
+                        bodyFont: { family: colors.monoFont },
+                    },
                 },
                 scales: {
-                    x: { ticks: { color: '#9aa3b2' }, grid: { color: 'rgba(255,255,255,0.05)' } },
-                    y: { ticks: { color: '#9aa3b2' }, grid: { color: 'rgba(255,255,255,0.05)' } },
+                    x: { ticks: { color: colors.muted, font: { family: colors.sansFont } }, grid: { color: colors.grid } },
+                    y: { ticks: { color: colors.muted, font: { family: colors.monoFont } }, grid: { color: colors.grid } },
                 },
             },
         });
@@ -575,13 +673,26 @@ function renderCharts(stats) {
         state.charts.monthly.data.labels = stats.chart_months;
         state.charts.monthly.data.datasets[0].data = stats.chart_revenue;
         state.charts.monthly.data.datasets[1].data = stats.chart_payables;
+        state.charts.monthly.data.datasets[0].borderColor = colors.revenue;
+        state.charts.monthly.data.datasets[0].backgroundColor = colors.revenueFill;
+        state.charts.monthly.data.datasets[1].borderColor = colors.payables;
+        state.charts.monthly.data.datasets[1].backgroundColor = colors.payablesFill;
+        state.charts.monthly.options.plugins.legend.labels.color = colors.text;
+        state.charts.monthly.options.plugins.legend.labels.font.family = colors.sansFont;
+        state.charts.monthly.options.plugins.tooltip.titleFont.family = colors.sansFont;
+        state.charts.monthly.options.plugins.tooltip.bodyFont.family = colors.monoFont;
+        Object.entries(state.charts.monthly.options.scales).forEach(([axis, scale]) => {
+            scale.ticks.color = colors.muted;
+            scale.ticks.font.family = axis === 'y' ? colors.monoFont : colors.sansFont;
+            scale.grid.color = colors.grid;
+        });
         state.charts.monthly.update();
     }
 }
 
 async function loadInvoices() {
-    const yearSelect = $('#invoice-year');
-    const yearValue = yearSelect ? yearSelect.value : state.invoiceYear;
+    const yearFilter = $('#invoice-year');
+    const yearValue = yearFilter ? yearFilter.value : state.invoiceYear;
     const year = yearValue && yearValue !== 'all' ? yearValue : null;
     const list = await invoke('get_invoices', { category: state.currentCategory, year });
     state.invoiceItems = list;
@@ -589,38 +700,25 @@ async function loadInvoices() {
 }
 
 async function loadInvoiceYears() {
-    const select = $('#invoice-year');
-    if (!select) return;
+    const filter = $('#invoice-year');
+    if (!filter) return;
     const years = await invoke('get_invoice_years', { category: state.currentCategory });
     const currentYear = String(new Date().getFullYear());
     const yearOptions = years.includes(currentYear) ? [...years] : [currentYear, ...years];
-    const current = state.invoiceYear || select.value || currentYear;
-    select.replaceChildren();
-    const allOption = document.createElement('option');
-    allOption.value = 'all';
-    allOption.textContent = 'All';
-    select.appendChild(allOption);
-    yearOptions.forEach(year => {
-        const option = document.createElement('option');
-        option.value = year;
-        option.textContent = year;
-        select.appendChild(option);
-    });
-    if (current === 'all') {
-        select.value = 'all';
-    } else if (yearOptions.includes(current)) {
-        select.value = current;
-    } else if (yearOptions.includes(currentYear)) {
-        select.value = currentYear;
-    } else {
-        select.value = 'all';
-    }
-    state.invoiceYear = select.value;
+    const current = state.invoiceYear || filter.value || currentYear;
+    const selected = current === 'all' || yearOptions.includes(current)
+        ? current
+        : yearOptions.includes(currentYear) ? currentYear : 'all';
+    renderFilterOptions(filter, [
+        { value: 'all', label: 'All' },
+        ...yearOptions.map(year => ({ value: year, label: year })),
+    ], selected);
+    state.invoiceYear = filter.value;
 }
 
 async function loadDashboardYears() {
-    const select = $('#year-select');
-    if (!select) return;
+    const filter = $('#year-select');
+    if (!filter) return;
 
     const [revenueYears, payableYears] = await Promise.all([
         invoke('get_invoice_years', { category: 'revenue' }),
@@ -632,29 +730,19 @@ async function loadDashboardYears() {
         .sort((a, b) => Number.parseInt(b, 10) - Number.parseInt(a, 10));
 
     const currentYear = String(new Date().getFullYear());
-    const previous = select.value;
+    const previous = filter.value;
     const yearOptions = years.length ? years : [currentYear];
 
-    select.replaceChildren();
-    yearOptions.forEach(year => {
-        const option = document.createElement('option');
-        option.value = year;
-        option.textContent = year;
-        select.appendChild(option);
-    });
-
-    if (yearOptions.includes(previous)) {
-        select.value = previous;
-    } else if (yearOptions.includes(currentYear)) {
-        select.value = currentYear;
-    } else {
-        select.value = yearOptions[0];
-    }
+    const selected = yearOptions.includes(previous)
+        ? previous
+        : yearOptions.includes(currentYear) ? currentYear : yearOptions[0];
+    renderFilterOptions(filter, yearOptions.map(year => ({ value: year, label: year })), selected);
 }
 
 function renderInvoiceList() {
     const tbody = $('#invoice-list');
     const items = sortItems(state.invoiceItems, 'invoices');
+    const focusedStatus = captureStatusFocus(tbody);
     tbody.replaceChildren();
     updateSortHeaders();
     if (!items.length) {
@@ -665,17 +753,25 @@ function renderInvoiceList() {
     items.forEach(item => {
         const row = document.createElement('tr');
         row.dataset.id = item.id;
-        row.classList.toggle('selected', item.id === state.selectedInvoiceId);
-        const dateCell = createTextNode('td', '', item.invoice_date || '-');
-        const counterpartyCell = createTextNode('td', '', item.counterparty_name || 'Unknown');
-        const amountCell = createTextNode('td', '', formatCurrency(item.total_amount));
+        setRowSelection(row, item.id === state.selectedInvoiceId);
+        const dateCell = createTextNode('td', 'oj-mono', item.invoice_date || '-');
+        const counterpartyCell = document.createElement('td');
+        const selectButton = createTextNode('button', 'oj-button oj-button-ghost oj-button-compact row-select', item.counterparty_name || 'Unknown');
+        selectButton.type = 'button';
+        selectButton.setAttribute('aria-label', `View invoice ${item.invoice_number || item.counterparty_name || item.invoice_date || ''}`.trim());
+        selectButton.addEventListener('click', event => {
+            event.stopPropagation();
+            selectInvoice(item.id);
+        });
+        counterpartyCell.appendChild(selectButton);
+        const amountCell = createTextNode('td', 'oj-numeric oj-mono', formatCurrency(item.total_amount));
         const statusCell = document.createElement('td');
         statusCell.appendChild(createStatusToggle(item.id, item.status));
-        const fileCell = createTextNode('td', '', item.file_path ? item.file_path.split('/').pop() : '-');
+        const fileCell = createTextNode('td', 'oj-mono', item.file_path ? item.file_path.split('/').pop() : '-');
         row.append(dateCell, counterpartyCell, amountCell, statusCell, fileCell);
         row.addEventListener('click', () => selectInvoice(item.id));
         row.querySelectorAll('.status-option').forEach(button => {
-            button.addEventListener('click', async event => {
+            button.addEventListener('change', async event => {
                 event.stopPropagation();
                 const status = button.dataset.status;
                 await invoke('update_invoice_field', {
@@ -694,12 +790,33 @@ function renderInvoiceList() {
         });
         tbody.appendChild(row);
     });
+    restoreStatusFocus(tbody, focusedStatus);
+}
+
+function captureStatusFocus(container) {
+    const active = document.activeElement;
+    if (!container.contains(active) || !active.matches('.status-option')) return null;
+    return { id: active.closest('.status-toggle').dataset.id, status: active.dataset.status };
+}
+
+function restoreStatusFocus(container, focus) {
+    if (!focus) return;
+    const input = Array.from(container.querySelectorAll('.status-option')).find(option =>
+        option.closest('.status-toggle').dataset.id === focus.id && option.dataset.status === focus.status
+    );
+    input?.focus({ preventScroll: true });
+}
+
+function setRowSelection(row, selected) {
+    row.classList.toggle('selected', selected);
+    if (selected) row.dataset.ojState = 'selected';
+    else delete row.dataset.ojState;
 }
 
 async function selectInvoice(id) {
     state.selectedInvoiceId = id;
     $$('#invoice-list tr').forEach(row => {
-        row.classList.toggle('selected', row.dataset.id === id);
+        setRowSelection(row, row.dataset.id === id);
     });
     const detail = await invoke('get_invoice_detail', { invoiceId: id });
     renderInvoiceDetail(detail);
@@ -707,6 +824,7 @@ async function selectInvoice(id) {
 
 function renderInvoiceDetail(detail) {
     const container = $('#detail-body');
+    const focusedStatus = captureStatusFocus(container);
     const invoice = detail.invoice;
     const fields = [
         ['invoice_number', 'Invoice Number'],
@@ -728,10 +846,13 @@ function renderInvoiceDetail(detail) {
     fields.forEach(([key, label, readOnly]) => {
         const row = document.createElement('div');
         row.className = 'detail-row';
-        const labelNode = createTextNode('span', '', label);
+        const labelNode = createTextNode('label', 'oj-label', label);
         const valueNode = document.createElement('div');
         valueNode.className = 'detail-value';
         const input = document.createElement('input');
+        input.className = 'oj-input';
+        input.id = `invoice-${invoice.id}-${key}`;
+        labelNode.htmlFor = input.id;
         input.dataset.field = key;
         input.value = invoice[key] ?? '';
         if (readOnly) {
@@ -744,7 +865,7 @@ function renderInvoiceDetail(detail) {
 
     const statusRow = document.createElement('div');
     statusRow.className = 'detail-row';
-    const statusLabel = createTextNode('span', '', 'Status');
+    const statusLabel = createTextNode('span', 'oj-label', 'Status');
     const statusValue = document.createElement('div');
     statusValue.className = 'detail-value';
     statusValue.appendChild(createStatusToggle(invoice.id, invoice.status));
@@ -752,7 +873,7 @@ function renderInvoiceDetail(detail) {
     container.appendChild(statusRow);
 
     statusRow.querySelectorAll('.status-option').forEach(button => {
-        button.addEventListener('click', async () => {
+        button.addEventListener('change', async () => {
             const status = button.dataset.status;
             await invoke('update_invoice_field', {
                 payload: {
@@ -774,14 +895,14 @@ function renderInvoiceDetail(detail) {
     const ocrBlock = document.createElement('div');
     ocrBlock.className = 'detail-block';
     ocrBlock.append(
-        createTextNode('h4', '', 'OCR / Extracted Text'),
-        createTextNode('pre', '', invoice.ocr_text || 'No text stored')
+        createTextNode('h4', 'oj-heading-4', 'OCR / Extracted Text'),
+        createTextNode('pre', 'oj-mono', invoice.ocr_text || 'No text stored')
     );
     container.appendChild(ocrBlock);
 
     const jsonBlock = document.createElement('div');
     jsonBlock.className = 'detail-block';
-    jsonBlock.append(createTextNode('h4', '', 'Extracted JSON'), createTextNode('pre', '', invoice.extracted_json || '{}'));
+    jsonBlock.append(createTextNode('h4', 'oj-heading-4', 'Extracted JSON'), createTextNode('pre', 'oj-mono', invoice.extracted_json || '{}'));
     container.appendChild(jsonBlock);
 
     container.querySelectorAll('input[data-field]').forEach(input => {
@@ -801,13 +922,14 @@ function renderInvoiceDetail(detail) {
             await loadDashboard();
         });
     });
+    restoreStatusFocus(container, focusedStatus);
 }
 
 function createInvoiceCategoryRow(invoice) {
     const row = document.createElement('div');
     row.className = 'detail-row detail-row-category';
 
-    const label = createTextNode('span', '', 'Category');
+    const label = createTextNode('span', 'oj-label', 'Category');
     const value = document.createElement('div');
     value.className = 'detail-value category-switch-field';
 
@@ -815,7 +937,7 @@ function createInvoiceCategoryRow(invoice) {
     const payableLabel = createTextNode('span', 'category-switch-label', 'Payables');
 
     const switchLabel = document.createElement('label');
-    switchLabel.className = 'category-switch';
+    switchLabel.className = 'category-switch oj-switch';
 
     const input = document.createElement('input');
     input.type = 'checkbox';
@@ -824,7 +946,8 @@ function createInvoiceCategoryRow(invoice) {
     input.setAttribute('aria-label', 'Move invoice between Revenue and Payables');
 
     const track = document.createElement('span');
-    track.className = 'category-switch-track';
+    track.className = 'category-switch-track oj-switch-track';
+    track.setAttribute('aria-hidden', 'true');
 
     input.addEventListener('change', async () => {
         const category = input.checked ? 'payable' : 'revenue';
@@ -875,6 +998,7 @@ function createPayableTagsRow(invoice) {
     row.className = 'detail-row detail-row-tags';
 
     const label = document.createElement('span');
+    label.className = 'oj-label';
     label.textContent = 'Tags';
 
     const editor = document.createElement('div');
@@ -888,7 +1012,9 @@ function createPayableTagsRow(invoice) {
         activeTags.forEach(tag => {
             const button = document.createElement('button');
             button.type = 'button';
-            button.className = 'tag-chip is-active';
+            button.className = 'tag-chip oj-tag';
+            button.setAttribute('aria-pressed', 'true');
+            button.setAttribute('aria-label', `Remove tag ${tag}`);
             button.textContent = `${tag} ×`;
             button.addEventListener('click', async () => {
                 await saveInvoiceTags(invoice.id, activeTags.filter(value => value !== tag));
@@ -897,7 +1023,7 @@ function createPayableTagsRow(invoice) {
         });
     } else {
         const empty = document.createElement('span');
-        empty.className = 'muted';
+        empty.className = 'oj-muted';
         empty.textContent = 'No tags';
         activeList.appendChild(empty);
     }
@@ -907,7 +1033,9 @@ function createPayableTagsRow(invoice) {
     PAYABLE_TAG_OPTIONS.filter(tag => !activeTags.includes(tag)).forEach(tag => {
         const button = document.createElement('button');
         button.type = 'button';
-        button.className = 'tag-chip is-add';
+        button.className = 'tag-chip oj-tag';
+        button.setAttribute('aria-pressed', 'false');
+        button.setAttribute('aria-label', `Add tag ${tag}`);
         button.textContent = `+ ${tag}`;
         button.addEventListener('click', async () => {
             await saveInvoiceTags(invoice.id, [...activeTags, tag]);
@@ -978,13 +1106,22 @@ function renderCustomerList() {
     items.forEach(item => {
         const row = document.createElement('tr');
         row.dataset.id = item.id;
-        row.classList.toggle('selected', item.id === state.selectedCustomerId);
+        setRowSelection(row, item.id === state.selectedCustomerId);
+        const nameCell = document.createElement('td');
+        const selectButton = createTextNode('button', 'oj-button oj-button-ghost oj-button-compact row-select', item.name || 'Unknown');
+        selectButton.type = 'button';
+        selectButton.setAttribute('aria-label', `View customer ${item.name || 'Unknown'}`);
+        selectButton.addEventListener('click', event => {
+            event.stopPropagation();
+            selectCustomer(item.id);
+        });
+        nameCell.appendChild(selectButton);
         row.append(
-            createTextNode('td', '', item.name || 'Unknown'),
-            createTextNode('td', '', item.first_invoice_date || '-'),
-            createTextNode('td', '', item.last_invoice_date || '-'),
-            createTextNode('td', '', formatCurrency(item.lifetime_value)),
-            createTextNode('td', '', formatDaysSinceLastInvoice(item.last_invoice_date))
+            nameCell,
+            createTextNode('td', 'oj-mono', item.first_invoice_date || '-'),
+            createTextNode('td', 'oj-mono', item.last_invoice_date || '-'),
+            createTextNode('td', 'oj-numeric oj-mono', formatCurrency(item.lifetime_value)),
+            createTextNode('td', 'oj-numeric', formatDaysSinceLastInvoice(item.last_invoice_date))
         );
         row.addEventListener('click', () => selectCustomer(item.id));
         tbody.appendChild(row);
@@ -994,7 +1131,7 @@ function renderCustomerList() {
 async function selectCustomer(id) {
     state.selectedCustomerId = id;
     $$('#customer-list tr').forEach(row => {
-        row.classList.toggle('selected', row.dataset.id === id);
+        setRowSelection(row, row.dataset.id === id);
     });
     $('#add-customer-contact').disabled = false;
     const detail = await invoke('get_customer_detail', { customerId: id });
@@ -1020,8 +1157,8 @@ function renderCustomerDetail(detail) {
         ['Invoices', customer.invoice_count || 0],
     ].forEach(([label, value]) => {
         const card = document.createElement('div');
-        card.className = 'detail-metric-card';
-        card.append(createTextNode('span', 'detail-metric-label', label), createTextNode('strong', '', value));
+        card.className = 'detail-metric-card oj-metric oj-metric-card';
+        card.append(createTextNode('span', 'detail-metric-label oj-metric-label', label), createTextNode('strong', 'oj-metric-value', value));
         metrics.appendChild(card);
     });
     container.replaceChildren(metrics);
@@ -1038,7 +1175,7 @@ function renderCustomerDetail(detail) {
     contactsBlock.className = 'detail-block detail-contacts-block';
     const contactsHeader = document.createElement('div');
     contactsHeader.className = 'detail-block-header';
-    contactsHeader.append(createTextNode('h4', '', 'Contacts'), createTextNode('span', 'muted', `${contacts.length} saved`));
+    contactsHeader.append(createTextNode('h4', 'oj-heading-4', 'Contacts'), createTextNode('span', 'oj-muted', `${contacts.length} saved`));
     contactsBlock.appendChild(contactsHeader);
 
     const contactsList = document.createElement('div');
@@ -1046,7 +1183,7 @@ function renderCustomerDetail(detail) {
 
     if (!contacts.length) {
         const empty = document.createElement('p');
-        empty.className = 'muted';
+        empty.className = 'oj-muted';
         empty.textContent = 'No contacts yet.';
         contactsList.appendChild(empty);
     } else {
@@ -1078,17 +1215,21 @@ function createCustomerFieldRow(label, field, value, multiline = false) {
     const row = document.createElement('div');
     row.className = `detail-row ${multiline ? 'detail-row-multiline' : ''}`;
 
-    const labelNode = document.createElement('span');
+    const labelNode = document.createElement('label');
+    labelNode.className = 'oj-label';
     labelNode.textContent = label;
 
     const valueNode = document.createElement('div');
     valueNode.className = 'detail-value';
 
     const input = multiline ? document.createElement('textarea') : document.createElement('input');
+    input.className = multiline ? 'detail-textarea oj-textarea' : 'oj-input';
+    input.id = `customer-${state.selectedCustomerId}-${field}`;
+    if (field === 'general_email') input.type = 'email';
+    labelNode.htmlFor = input.id;
     input.dataset.customerField = field;
     input.value = value;
     if (multiline) {
-        input.className = 'detail-textarea';
         input.rows = 3;
     }
 
@@ -1100,7 +1241,7 @@ function createCustomerFieldRow(label, field, value, multiline = false) {
 function createCustomerReadonlyRow(label, value) {
     const row = document.createElement('div');
     row.className = 'detail-row';
-    row.append(createTextNode('span', '', label), createTextNode('div', 'detail-value detail-value-static', value));
+    row.append(createTextNode('span', 'oj-label', label), createTextNode('div', 'detail-value detail-value-static', value));
     return row;
 }
 
@@ -1109,17 +1250,21 @@ function createCustomerContactRow(customerId, contact) {
     row.className = 'contact-row';
 
     const nameInput = document.createElement('input');
+    nameInput.className = 'oj-input';
+    nameInput.id = `contact-${contact.id}-name`;
     nameInput.placeholder = 'Name';
     nameInput.value = contact.name || '';
 
     const emailInput = document.createElement('input');
+    emailInput.className = 'oj-input';
+    emailInput.id = `contact-${contact.id}-email`;
     emailInput.placeholder = 'email@company.com';
     emailInput.type = 'email';
     emailInput.value = contact.email || '';
 
     const removeButton = document.createElement('button');
     removeButton.type = 'button';
-    removeButton.className = 'ghost';
+    removeButton.className = 'oj-button oj-button-ghost';
     removeButton.textContent = 'Remove';
 
     nameInput.addEventListener('change', async () => {
@@ -1149,7 +1294,17 @@ function createCustomerContactRow(customerId, contact) {
         await loadCustomers();
     });
 
-    row.append(nameInput, emailInput, removeButton);
+    const nameField = document.createElement('div');
+    nameField.className = 'oj-field';
+    const nameLabel = createTextNode('label', 'oj-label', 'Name');
+    nameLabel.htmlFor = nameInput.id;
+    nameField.append(nameLabel, nameInput);
+    const emailField = document.createElement('div');
+    emailField.className = 'oj-field';
+    const emailLabel = createTextNode('label', 'oj-label', 'Email');
+    emailLabel.htmlFor = emailInput.id;
+    emailField.append(emailLabel, emailInput);
+    row.append(nameField, emailField, removeButton);
     return row;
 }
 
@@ -1238,12 +1393,14 @@ function renderEmailRecipientList() {
 
         const button = document.createElement('button');
         button.type = 'button';
-        button.className = 'email-recipient-button';
-        button.classList.toggle('active', recipient.id === state.selectedEmailRecipientId);
+        button.className = 'email-recipient-button oj-button oj-panel oj-panel-compact oj-panel-interactive';
+        const selected = recipient.id === state.selectedEmailRecipientId;
+        button.setAttribute('aria-pressed', String(selected));
+        if (selected) button.dataset.ojState = 'selected';
         const copy = document.createElement('span');
         copy.className = 'email-recipient-copy';
         copy.append(createTextNode('strong', '', recipient.display_name), createTextNode('span', '', recipient.email));
-        button.append(copy, createTextNode('span', 'email-recipient-kind', recipient.kind));
+        button.append(copy, createTextNode('span', 'email-recipient-kind oj-badge', recipient.kind));
         button.addEventListener('click', () => selectEmailRecipient(recipient.id));
         groupList.appendChild(button);
     });
@@ -1269,8 +1426,10 @@ function renderEmailTemplateList() {
     state.emailTemplates.forEach(template => {
         const button = document.createElement('button');
         button.type = 'button';
-        button.className = 'email-template-button';
-        button.classList.toggle('active', template.id === state.selectedEmailTemplateId);
+        button.className = 'email-template-button oj-button oj-panel oj-panel-compact oj-panel-interactive';
+        const selected = template.id === state.selectedEmailTemplateId;
+        button.setAttribute('aria-pressed', String(selected));
+        if (selected) button.dataset.ojState = 'selected';
         button.append(createTextNode('strong', '', template.name), createTextNode('span', '', template.subject || 'No subject yet'));
         button.addEventListener('click', () => selectEmailTemplate(template.id));
         container.appendChild(button);
@@ -1360,7 +1519,7 @@ function setEmailSendingState(isSending) {
     state.emailSending = isSending;
     const button = $('#send-email');
     if (!button) return;
-    button.classList.toggle('is-loading', isSending);
+    button.classList.toggle('oj-button-loading', isSending);
     button.setAttribute('aria-busy', isSending ? 'true' : 'false');
     const label = button.querySelector('.button-label');
     if (label) {
@@ -1515,63 +1674,70 @@ async function saveSettings() {
 
 async function init() {
     const now = new Date();
-    const yearSelect = $('#year-select');
-    const monthSelect = $('#month-select');
+    const yearFilter = $('#year-select');
+    const monthFilter = $('#month-select');
 
     const months = ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12'];
-    months.forEach((value, index) => {
-        const option = document.createElement('option');
-        option.value = value;
-        option.textContent = MONTH_NAMES[index] || value;
-        monthSelect.appendChild(option);
-    });
-    monthSelect.value = String(now.getMonth() + 1).padStart(2, '0');
+    renderFilterOptions(monthFilter, months.map((value, index) => ({ value, label: MONTH_NAMES[index] })),
+        String(now.getMonth() + 1).padStart(2, '0'));
 
-    yearSelect.addEventListener('change', loadDashboard);
-    monthSelect.addEventListener('change', loadDashboard);
-    const invoiceYearSelect = $('#invoice-year');
-    if (invoiceYearSelect) {
-        invoiceYearSelect.addEventListener('change', async () => {
-            state.invoiceYear = invoiceYearSelect.value;
+    bindFilter(yearFilter, loadDashboard);
+    bindFilter(monthFilter, loadDashboard);
+    const invoiceYearFilter = $('#invoice-year');
+    if (invoiceYearFilter) {
+        bindFilter(invoiceYearFilter, async () => {
+            state.invoiceYear = invoiceYearFilter.value;
             state.selectedInvoiceId = null;
             renderInvoicePlaceholder();
             await loadInvoices();
         });
     }
 
+    const appTabs = $('.app-shell');
+    const refreshView = async view => {
+        if (view === 'customers') {
+            await loadCustomers({ showDetail: true });
+        } else if (view === 'emails') {
+            await loadEmails();
+        }
+    };
+    appTabs.addEventListener('oj:change', async event => {
+        if (event.target !== appTabs) return;
+        const view = event.detail.tab.dataset.view;
+        setActiveView(view);
+        await refreshView(view);
+    });
     $$('.tab').forEach(tab => {
         tab.addEventListener('click', async () => {
-            const view = tab.dataset.view;
-            setActiveView(view);
-            if (view === 'customers') {
-                await loadCustomers({ showDetail: true });
-            } else if (view === 'emails') {
-                await loadEmails();
+            if (tab.getAttribute('aria-selected') === 'true') {
+                await refreshView(tab.dataset.view);
             }
         });
     });
 
+    const settingsTabs = $('.settings-shell');
+    settingsTabs.addEventListener('oj:change', event => {
+        if (event.target === settingsTabs) setActiveSettingsSection(event.detail.tab.dataset.settingsSection);
+    });
+    const emailTabs = $('.email-tabs');
+    emailTabs.addEventListener('oj:change', event => {
+        if (event.target === emailTabs) setActiveEmailSection(event.detail.tab.dataset.emailSection);
+    });
+    const cleanupTabs = initTabs(appTabs);
+    const cleanupDropdowns = initDropdowns(appTabs);
+    window.addEventListener('beforeunload', () => {
+        cleanupDropdowns();
+        cleanupTabs();
+    }, { once: true });
+
     $$('#invoice-category .segment').forEach(segment => {
-        segment.addEventListener('click', async () => {
+        segment.addEventListener('change', async () => {
             setActiveInvoiceCategory(segment.dataset.category);
             state.selectedInvoiceId = null;
             renderInvoicePlaceholder();
             await loadInvoiceYears();
             await loadInvoices();
         });
-    });
-
-    $$('.settings-toggle-button').forEach(button => {
-        if (button.dataset.settingsSection) {
-            button.addEventListener('click', () => {
-                setActiveSettingsSection(button.dataset.settingsSection);
-            });
-        }
-        if (button.dataset.emailSection) {
-            button.addEventListener('click', () => {
-                setActiveEmailSection(button.dataset.emailSection);
-            });
-        }
     });
 
     $$('.table-sort').forEach(button => {

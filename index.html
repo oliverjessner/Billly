@@ -4,104 +4,256 @@
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <title>Billly</title>
+        <link rel="stylesheet" href="/public/vendor/oj-designsystem/styles.css" />
         <link rel="stylesheet" href="/src/styles.css" />
     </head>
-    <body>
-        <div class="app-shell">
+    <body class="oj-app">
+        <div class="app-shell" data-oj-tabs>
             <header class="topbar">
                 <div class="brand">
                     <img class="brand-logo" src="/public/logo.png" alt="Billly logo" />
-                    <span class="logo">Billly</span>
-                    <span class="badge">Invoice Intelligence</span>
+                    <h1 class="logo oj-heading-2">Billly</h1>
+                    <span class="badge oj-badge">Invoice Intelligence</span>
                 </div>
-                <div class="status" id="status-indicator">
-                    <span class="dot"></span>
+                <div class="status oj-status oj-status-success" id="status-indicator" role="status" aria-live="polite">
+                    <span class="dot oj-status-dot" aria-hidden="true"></span>
                     <span class="text">Ready</span>
                 </div>
             </header>
 
-            <nav class="tabs">
-                <button class="tab active" data-view="dashboard">Dashboard</button>
-                <button class="tab" data-view="invoices">Invoices</button>
-                <button class="tab" data-view="customers">Customers</button>
-                <button class="tab" data-view="emails">Emails</button>
-                <button class="tab" data-view="settings">Settings</button>
+            <nav class="tabs oj-tab-list" role="tablist" aria-label="Billly sections">
+                <button
+                    class="tab active oj-tab"
+                    data-view="dashboard"
+                    type="button"
+                    role="tab"
+                    id="tab-dashboard"
+                    aria-controls="view-dashboard"
+                    aria-selected="true"
+                >
+                    Dashboard
+                </button>
+                <button
+                    class="tab oj-tab"
+                    data-view="invoices"
+                    type="button"
+                    role="tab"
+                    id="tab-invoices"
+                    aria-controls="view-invoices"
+                    aria-selected="false"
+                >
+                    Invoices
+                </button>
+                <button
+                    class="tab oj-tab"
+                    data-view="customers"
+                    type="button"
+                    role="tab"
+                    id="tab-customers"
+                    aria-controls="view-customers"
+                    aria-selected="false"
+                >
+                    Customers
+                </button>
+                <button
+                    class="tab oj-tab"
+                    data-view="emails"
+                    type="button"
+                    role="tab"
+                    id="tab-emails"
+                    aria-controls="view-emails"
+                    aria-selected="false"
+                >
+                    Emails
+                </button>
+                <button
+                    class="tab oj-tab"
+                    data-view="settings"
+                    type="button"
+                    role="tab"
+                    id="tab-settings"
+                    aria-controls="view-settings"
+                    aria-selected="false"
+                >
+                    Settings
+                </button>
             </nav>
 
             <main class="content">
-                <section id="view-dashboard" class="view active">
-                    <div class="toolbar">
-                        <div class="toolbar-group">
-                            <label for="year-select">Year</label>
-                            <select id="year-select"></select>
-                            <label for="month-select">Month</label>
-                            <select id="month-select"></select>
+                <section
+                    id="view-dashboard"
+                    class="view active oj-tab-panel"
+                    role="tabpanel"
+                    aria-labelledby="tab-dashboard"
+                >
+                    <div class="toolbar oj-toolbar">
+                        <div class="toolbar-group oj-inline">
+                            <span id="dashboard-year-label" class="oj-label">Year</span>
+                            <div class="filter-dropdown oj-dropdown" data-oj-dropdown>
+                                <button
+                                    id="year-select"
+                                    class="filter-trigger oj-button oj-button-secondary"
+                                    type="button"
+                                    data-oj-dropdown-trigger
+                                    aria-labelledby="dashboard-year-label dashboard-year-value"
+                                    disabled
+                                >
+                                    <span id="dashboard-year-value" data-oj-filter-value>—</span>
+                                    <i class="fa-solid fa-chevron-down" aria-hidden="true"></i>
+                                </button>
+                                <div
+                                    id="dashboard-year-menu"
+                                    class="filter-menu oj-menu"
+                                    data-oj-dropdown-menu
+                                    role="menu"
+                                    aria-labelledby="dashboard-year-label"
+                                    hidden
+                                ></div>
+                            </div>
+                            <span id="dashboard-month-label" class="oj-label">Month</span>
+                            <div class="filter-dropdown oj-dropdown" data-oj-dropdown>
+                                <button
+                                    id="month-select"
+                                    class="filter-trigger oj-button oj-button-secondary"
+                                    type="button"
+                                    data-oj-dropdown-trigger
+                                    aria-labelledby="dashboard-month-label dashboard-month-value"
+                                    disabled
+                                >
+                                    <span id="dashboard-month-value" data-oj-filter-value>—</span>
+                                    <i class="fa-solid fa-chevron-down" aria-hidden="true"></i>
+                                </button>
+                                <div
+                                    id="dashboard-month-menu"
+                                    class="filter-menu oj-menu"
+                                    data-oj-dropdown-menu
+                                    role="menu"
+                                    aria-labelledby="dashboard-month-label"
+                                    hidden
+                                ></div>
+                            </div>
                         </div>
                     </div>
 
                     <div class="kpi-grid" id="kpi-grid"></div>
 
                     <div class="dashboard-top-grid">
-                        <div class="panel panel-span-3">
-                            <h3>Monthly Trend</h3>
-                            <canvas id="chart-monthly" class="dashboard-chart"></canvas>
+                        <div class="panel panel-span-3 oj-panel">
+                            <h3 class="oj-heading-3">Monthly Trend</h3>
+                            <canvas
+                                id="chart-monthly"
+                                class="dashboard-chart"
+                                role="img"
+                                aria-label="Monthly revenue and payables"
+                            ></canvas>
                         </div>
-                        <div class="panel">
-                            <h3>Overdue</h3>
+                        <div class="panel oj-panel">
+                            <h3 class="oj-heading-3">Overdue</h3>
                             <div class="panel-metrics">
-                                <div class="panel-metric">
-                                    <span class="metric-label">Overdue Revenue</span>
-                                    <span class="metric-value negative" id="overdue-revenue"></span>
+                                <div class="panel-metric oj-metric">
+                                    <span class="metric-label oj-metric-label">Overdue Revenue</span>
+                                    <span class="metric-value negative oj-metric-value" id="overdue-revenue"></span>
                                 </div>
-                                <div class="panel-metric">
-                                    <span class="metric-label">Overdue Payables</span>
-                                    <span class="metric-value negative" id="overdue-payables"></span>
+                                <div class="panel-metric oj-metric">
+                                    <span class="metric-label oj-metric-label">Overdue Payables</span>
+                                    <span class="metric-value negative oj-metric-value" id="overdue-payables"></span>
                                 </div>
                             </div>
                         </div>
                     </div>
 
                     <div class="panel-grid">
-                        <div class="panel">
-                            <h3>Open Revenue</h3>
-                            <ul class="list dashboard-list" id="open-revenue-list"></ul>
+                        <div class="panel oj-panel">
+                            <h3 class="oj-heading-3">Open Revenue</h3>
+                            <ul class="list dashboard-list oj-list" id="open-revenue-list"></ul>
                         </div>
-                        <div class="panel">
-                            <h3>Open Payables</h3>
-                            <ul class="list dashboard-list" id="open-payables-list"></ul>
+                        <div class="panel oj-panel">
+                            <h3 class="oj-heading-3">Open Payables</h3>
+                            <ul class="list dashboard-list oj-list" id="open-payables-list"></ul>
                         </div>
-                        <div class="panel">
-                            <h3 id="best-customer-title">Best Customer</h3>
-                            <ul class="list dashboard-list" id="best-customer-list"></ul>
+                        <div class="panel oj-panel">
+                            <h3 id="best-customer-title" class="oj-heading-3">Best Customer</h3>
+                            <ul class="list dashboard-list oj-list" id="best-customer-list"></ul>
                         </div>
-                        <div class="panel">
-                            <h3 id="highest-cost-title">Highest Cost</h3>
-                            <ul class="list dashboard-list" id="highest-cost-list"></ul>
+                        <div class="panel oj-panel">
+                            <h3 id="highest-cost-title" class="oj-heading-3">Highest Cost</h3>
+                            <ul class="list dashboard-list oj-list" id="highest-cost-list"></ul>
                         </div>
                     </div>
                 </section>
 
-                <section id="view-invoices" class="view">
-                    <div class="toolbar">
-                        <div class="segmented" id="invoice-category">
-                            <button class="segment active" data-category="revenue">Revenue</button>
-                            <button class="segment" data-category="payable">Payables</button>
+                <section
+                    id="view-invoices"
+                    class="view oj-tab-panel"
+                    role="tabpanel"
+                    aria-labelledby="tab-invoices"
+                    hidden
+                >
+                    <div class="toolbar oj-toolbar">
+                        <div
+                            class="segmented oj-segmented"
+                            id="invoice-category"
+                            role="group"
+                            aria-label="Invoice category"
+                        >
+                            <label class="oj-label"
+                                ><input
+                                    class="segment"
+                                    type="radio"
+                                    name="invoice-category"
+                                    value="revenue"
+                                    data-category="revenue"
+                                    checked
+                                /><span>Revenue</span></label
+                            >
+                            <label class="oj-label"
+                                ><input
+                                    class="segment"
+                                    type="radio"
+                                    name="invoice-category"
+                                    value="payable"
+                                    data-category="payable"
+                                /><span>Payables</span></label
+                            >
                         </div>
-                        <div class="toolbar-group">
-                            <label for="invoice-year">Year</label>
-                            <select id="invoice-year"></select>
+                        <div class="toolbar-group oj-inline">
+                            <span id="invoice-year-label" class="oj-label">Year</span>
+                            <div class="filter-dropdown oj-dropdown" data-oj-dropdown>
+                                <button
+                                    id="invoice-year"
+                                    class="filter-trigger oj-button oj-button-secondary"
+                                    type="button"
+                                    data-oj-dropdown-trigger
+                                    aria-labelledby="invoice-year-label invoice-year-value"
+                                    disabled
+                                >
+                                    <span id="invoice-year-value" data-oj-filter-value>—</span>
+                                    <i class="fa-solid fa-chevron-down" aria-hidden="true"></i>
+                                </button>
+                                <div
+                                    id="invoice-year-menu"
+                                    class="filter-menu oj-menu"
+                                    data-oj-dropdown-menu
+                                    role="menu"
+                                    aria-labelledby="invoice-year-label"
+                                    hidden
+                                ></div>
+                            </div>
                         </div>
                     </div>
 
                     <div class="invoices-layout">
-                        <div class="panel list-panel">
-                            <div class="table-scroll">
-                                <table class="table">
+                        <div class="panel list-panel oj-panel">
+                            <div class="table-scroll oj-scroll-area" role="region" aria-label="Invoices" tabindex="0">
+                                <table class="table oj-table oj-table-hover oj-table-sticky">
+                                    <caption class="oj-sr-only">
+                                        Invoices
+                                    </caption>
                                     <thead>
                                         <tr>
-                                            <th>
+                                            <th scope="col">
                                                 <button
-                                                    class="table-sort"
+                                                    class="table-sort oj-table-sort"
                                                     type="button"
                                                     data-table="invoices"
                                                     data-sort-key="invoice_date"
@@ -110,9 +262,9 @@
                                                     <span class="table-sort-indicator"></span>
                                                 </button>
                                             </th>
-                                            <th>
+                                            <th scope="col">
                                                 <button
-                                                    class="table-sort"
+                                                    class="table-sort oj-table-sort"
                                                     type="button"
                                                     data-table="invoices"
                                                     data-sort-key="counterparty_name"
@@ -121,9 +273,9 @@
                                                     <span class="table-sort-indicator"></span>
                                                 </button>
                                             </th>
-                                            <th>
+                                            <th scope="col">
                                                 <button
-                                                    class="table-sort"
+                                                    class="table-sort oj-table-sort"
                                                     type="button"
                                                     data-table="invoices"
                                                     data-sort-key="total_amount"
@@ -132,9 +284,9 @@
                                                     <span class="table-sort-indicator"></span>
                                                 </button>
                                             </th>
-                                            <th>
+                                            <th scope="col">
                                                 <button
-                                                    class="table-sort"
+                                                    class="table-sort oj-table-sort"
                                                     type="button"
                                                     data-table="invoices"
                                                     data-sort-key="status"
@@ -143,9 +295,9 @@
                                                     <span class="table-sort-indicator"></span>
                                                 </button>
                                             </th>
-                                            <th>
+                                            <th scope="col">
                                                 <button
-                                                    class="table-sort"
+                                                    class="table-sort oj-table-sort"
                                                     type="button"
                                                     data-table="invoices"
                                                     data-sort-key="file_path"
@@ -161,33 +313,52 @@
                             </div>
                         </div>
 
-                        <div class="panel detail" id="invoice-detail">
+                        <div class="panel detail oj-panel" id="invoice-detail">
                             <div class="detail-header">
-                                <h3>Details</h3>
-                                <div class="detail-actions">
-                                    <button class="ghost" id="open-pdf">Open File</button>
-                                    <button class="danger" id="delete-invoice">Delete</button>
-                                    <button class="primary" id="reprocess-single">Reprocess</button>
+                                <h3 class="oj-heading-3">Details</h3>
+                                <div class="detail-actions oj-cluster">
+                                    <button class="ghost oj-button oj-button-ghost" id="open-pdf" type="button">
+                                        Open File
+                                    </button>
+                                    <button class="danger oj-button oj-button-danger" id="delete-invoice" type="button">
+                                        Delete
+                                    </button>
+                                    <button
+                                        class="primary oj-button oj-button-primary"
+                                        id="reprocess-single"
+                                        type="button"
+                                    >
+                                        Reprocess
+                                    </button>
                                 </div>
                             </div>
                             <div class="detail-body" id="detail-body">
-                                <p class="muted">Select an invoice from the list.</p>
+                                <p class="muted oj-muted">Select an invoice from the list.</p>
                             </div>
                         </div>
                     </div>
                 </section>
 
-                <section id="view-customers" class="view">
-                    <div class="toolbar toolbar-spacer" aria-hidden="true"></div>
+                <section
+                    id="view-customers"
+                    class="view oj-tab-panel"
+                    role="tabpanel"
+                    aria-labelledby="tab-customers"
+                    hidden
+                >
+                    <div class="toolbar toolbar-spacer oj-toolbar" aria-hidden="true"></div>
                     <div class="invoices-layout customers-layout">
-                        <div class="panel list-panel">
-                            <div class="table-scroll">
-                                <table class="table">
+                        <div class="panel list-panel oj-panel">
+                            <div class="table-scroll oj-scroll-area" role="region" aria-label="Customers" tabindex="0">
+                                <table class="table oj-table oj-table-hover oj-table-sticky">
+                                    <caption class="oj-sr-only">
+                                        Customers
+                                    </caption>
                                     <thead>
                                         <tr>
-                                            <th>
+                                            <th scope="col">
                                                 <button
-                                                    class="table-sort"
+                                                    class="table-sort oj-table-sort"
                                                     type="button"
                                                     data-table="customers"
                                                     data-sort-key="name"
@@ -196,9 +367,9 @@
                                                     <span class="table-sort-indicator"></span>
                                                 </button>
                                             </th>
-                                            <th>
+                                            <th scope="col">
                                                 <button
-                                                    class="table-sort"
+                                                    class="table-sort oj-table-sort"
                                                     type="button"
                                                     data-table="customers"
                                                     data-sort-key="first_invoice_date"
@@ -207,9 +378,9 @@
                                                     <span class="table-sort-indicator"></span>
                                                 </button>
                                             </th>
-                                            <th>
+                                            <th scope="col">
                                                 <button
-                                                    class="table-sort"
+                                                    class="table-sort oj-table-sort"
                                                     type="button"
                                                     data-table="customers"
                                                     data-sort-key="last_invoice_date"
@@ -218,9 +389,9 @@
                                                     <span class="table-sort-indicator"></span>
                                                 </button>
                                             </th>
-                                            <th>
+                                            <th scope="col">
                                                 <button
-                                                    class="table-sort"
+                                                    class="table-sort oj-table-sort"
                                                     type="button"
                                                     data-table="customers"
                                                     data-sort-key="lifetime_value"
@@ -229,9 +400,9 @@
                                                     <span class="table-sort-indicator"></span>
                                                 </button>
                                             </th>
-                                            <th>
+                                            <th scope="col">
                                                 <button
-                                                    class="table-sort"
+                                                    class="table-sort oj-table-sort"
                                                     type="button"
                                                     data-table="customers"
                                                     data-sort-key="days_since_last_invoice"
@@ -247,382 +418,593 @@
                             </div>
                         </div>
 
-                        <div class="panel detail" id="customer-detail">
+                        <div class="panel detail oj-panel" id="customer-detail">
                             <div class="detail-header">
-                                <h3>Customer Details</h3>
-                                <div class="detail-actions">
-                                    <button class="primary" id="add-customer-contact" disabled>Add Contact</button>
+                                <h3 class="oj-heading-3">Customer Details</h3>
+                                <div class="detail-actions oj-cluster">
+                                    <button
+                                        class="primary oj-button oj-button-primary"
+                                        id="add-customer-contact"
+                                        disabled
+                                        type="button"
+                                    >
+                                        Add Contact
+                                    </button>
                                 </div>
                             </div>
                             <div class="detail-body" id="customer-detail-body">
-                                <p class="muted">Select a customer from the list.</p>
+                                <p class="muted oj-muted">Select a customer from the list.</p>
                             </div>
                         </div>
                     </div>
                 </section>
 
-                <section id="view-emails" class="view">
-                    <div class="email-nav">
-                        <div class="settings-toggle" role="tablist" aria-label="Email Sections">
-                            <button class="settings-toggle-button active" type="button" data-email-section="send">
-                                Send
-                            </button>
-                            <button class="settings-toggle-button" type="button" data-email-section="templates">
-                                Templates
-                            </button>
-                            <button class="settings-toggle-button" type="button" data-email-section="signature">
-                                Signature
-                            </button>
-                        </div>
-                    </div>
-
-                    <div class="email-panel" data-email-panel="send">
-                        <div class="emails-layout">
-                            <div class="panel email-recipient-panel">
-                                <div class="detail-header">
-                                    <div>
-                                        <h3>Recipients</h3>
-                                        <p class="muted">Choose any customer or saved contact with an email address.</p>
-                                    </div>
-                                </div>
-
-                                <div class="field">
-                                    <label>Search</label>
-                                    <input
-                                        id="email-recipient-search"
-                                        type="text"
-                                        placeholder="Search customer or contact"
-                                    />
-                                </div>
-
-                                <div class="email-recipient-list" id="email-recipient-list"></div>
+                <section id="view-emails" class="view oj-tab-panel" role="tabpanel" aria-labelledby="tab-emails" hidden>
+                    <div class="email-tabs" data-oj-tabs>
+                        <div class="email-nav">
+                            <div class="settings-toggle oj-tab-list" role="tablist" aria-label="Email Sections">
+                                <button
+                                    class="settings-toggle-button active oj-tab"
+                                    type="button"
+                                    data-email-section="send"
+                                    role="tab"
+                                    id="email-tab-send"
+                                    aria-controls="email-panel-send"
+                                    aria-selected="true"
+                                >
+                                    Send
+                                </button>
+                                <button
+                                    class="settings-toggle-button oj-tab"
+                                    type="button"
+                                    data-email-section="templates"
+                                    role="tab"
+                                    id="email-tab-templates"
+                                    aria-controls="email-panel-templates"
+                                    aria-selected="false"
+                                >
+                                    Templates
+                                </button>
+                                <button
+                                    class="settings-toggle-button oj-tab"
+                                    type="button"
+                                    data-email-section="signature"
+                                    role="tab"
+                                    id="email-tab-signature"
+                                    aria-controls="email-panel-signature"
+                                    aria-selected="false"
+                                >
+                                    Signature
+                                </button>
                             </div>
+                        </div>
 
-                            <div class="panel email-compose-panel">
-                                <div class="detail-header">
-                                    <div>
-                                        <h3>Send Invoice</h3>
-                                        <p class="muted">Pick a recipient, choose an invoice and send through Gmail.</p>
+                        <div
+                            class="email-panel oj-tab-panel"
+                            data-email-panel="send"
+                            id="email-panel-send"
+                            role="tabpanel"
+                            aria-labelledby="email-tab-send"
+                        >
+                            <div class="emails-layout">
+                                <div class="panel email-recipient-panel oj-panel">
+                                    <div class="detail-header">
+                                        <div>
+                                            <h3 class="oj-heading-3">Recipients</h3>
+                                            <p class="muted oj-muted">
+                                                Choose any customer or saved contact with an email address.
+                                            </p>
+                                        </div>
                                     </div>
-                                    <button class="primary button-with-spinner" id="send-email" disabled>
-                                        <span class="button-spinner" aria-hidden="true"></span>
-                                        <span class="button-label">Send via Gmail</span>
-                                    </button>
+
+                                    <div class="field oj-field">
+                                        <label class="oj-label" for="email-recipient-search">Search</label>
+                                        <input
+                                            id="email-recipient-search"
+                                            type="text"
+                                            placeholder="Search customer or contact"
+                                            class="oj-input"
+                                        />
+                                    </div>
+
+                                    <div class="email-recipient-list" id="email-recipient-list"></div>
                                 </div>
 
-                                <div class="email-compose-grid">
-                                    <div class="field">
-                                        <label>From</label>
-                                        <input
-                                            id="email-from"
-                                            type="text"
-                                            readonly
-                                            placeholder="Connect Google first"
-                                        />
+                                <div class="panel email-compose-panel oj-panel">
+                                    <div class="detail-header">
+                                        <div>
+                                            <h3 class="oj-heading-3">Send Invoice</h3>
+                                            <p class="muted oj-muted">
+                                                Pick a recipient, choose an invoice and send through Gmail.
+                                            </p>
+                                        </div>
+                                        <button
+                                            class="primary button-with-spinner oj-button oj-button-primary"
+                                            id="send-email"
+                                            disabled
+                                            type="button"
+                                        >
+                                            <span class="button-spinner oj-spinner" aria-hidden="true"></span>
+                                            <span class="button-label">Send via Gmail</span>
+                                        </button>
                                     </div>
 
-                                    <div class="field">
-                                        <label>Recipient</label>
-                                        <input
-                                            id="email-recipient-display"
-                                            type="text"
-                                            readonly
-                                            placeholder="Select a customer or contact"
-                                        />
-                                    </div>
-
-                                    <div class="field">
-                                        <label>Invoice</label>
-                                        <select id="email-invoice-select"></select>
-                                    </div>
-
-                                    <div class="field">
-                                        <label>Template</label>
-                                        <select id="email-template-select"></select>
-                                    </div>
-
-                                    <div class="field field-span-2">
-                                        <label>Subject</label>
-                                        <input
-                                            id="email-compose-subject"
-                                            type="text"
-                                            placeholder="Invoice from Billly"
-                                        />
-                                    </div>
-
-                                    <div class="email-compose-split field-span-2">
-                                        <div class="field email-compose-message-field">
-                                            <label>Message</label>
-                                            <textarea
-                                                class="textarea-fixed"
-                                                id="email-compose-body"
-                                                placeholder="Hi <name>,&#10;&#10;attached you will find your invoice."
-                                            ></textarea>
+                                    <div class="email-compose-grid">
+                                        <div class="field oj-field">
+                                            <label class="oj-label" for="email-from">From</label>
+                                            <input
+                                                id="email-from"
+                                                type="text"
+                                                readonly
+                                                placeholder="Connect Google first"
+                                                class="oj-input"
+                                            />
                                         </div>
 
-                                        <div class="field email-preview-field">
-                                            <label>Preview</label>
-                                            <div class="detail-block email-preview-block">
-                                                <div class="detail-block-header email-preview-header">
-                                                    <span class="muted" id="email-preview-meta"
-                                                        >Load a template or type manually</span
+                                        <div class="field oj-field">
+                                            <label class="oj-label" for="email-recipient-display">Recipient</label>
+                                            <input
+                                                id="email-recipient-display"
+                                                type="text"
+                                                readonly
+                                                placeholder="Select a customer or contact"
+                                                class="oj-input"
+                                            />
+                                        </div>
+
+                                        <div class="field oj-field">
+                                            <label class="oj-label" for="email-invoice-select">Invoice</label>
+                                            <select id="email-invoice-select" class="oj-select"></select>
+                                        </div>
+
+                                        <div class="field oj-field">
+                                            <label class="oj-label" for="email-template-select">Template</label>
+                                            <select id="email-template-select" class="oj-select"></select>
+                                        </div>
+
+                                        <div class="field field-span-2 oj-field">
+                                            <label class="oj-label" for="email-compose-subject">Subject</label>
+                                            <input
+                                                id="email-compose-subject"
+                                                type="text"
+                                                placeholder="Invoice from Billly"
+                                                class="oj-input"
+                                            />
+                                        </div>
+
+                                        <div class="email-compose-split field-span-2">
+                                            <div class="field email-compose-message-field oj-field">
+                                                <label class="oj-label" for="email-compose-body">Message</label>
+                                                <textarea
+                                                    class="textarea-fixed oj-textarea"
+                                                    id="email-compose-body"
+                                                    placeholder="Hi <name>,&#10;&#10;attached you will find your invoice."
+                                                ></textarea>
+                                            </div>
+
+                                            <div class="field email-preview-field oj-field">
+                                                <span class="oj-label" id="email-preview-label">Preview</span>
+                                                <div class="detail-block email-preview-block oj-panel oj-panel-compact">
+                                                    <div class="detail-block-header email-preview-header">
+                                                        <span class="muted oj-muted" id="email-preview-meta"
+                                                            >Load a template or type manually</span
+                                                        >
+                                                    </div>
+                                                    <pre
+                                                        id="email-preview"
+                                                        class="oj-mono"
+                                                        aria-labelledby="email-preview-label"
                                                     >
+Select a recipient to preview the final email.</pre>
                                                 </div>
-                                                <pre id="email-preview">
-Select a recipient to preview the final email.</pre
-                                                >
                                             </div>
                                         </div>
                                     </div>
                                 </div>
                             </div>
                         </div>
-                    </div>
 
-                    <div class="email-panel hidden" data-email-panel="templates">
-                        <div class="emails-layout emails-template-layout">
-                            <div class="panel email-template-list-panel">
-                                <div class="detail-header">
-                                    <div>
-                                        <h3>Templates</h3>
-                                    </div>
-                                    <button class="ghost" id="new-email-template">New Template</button>
-                                </div>
-
-                                <div class="email-template-list" id="email-template-list"></div>
-                            </div>
-
-                            <div class="panel email-template-editor-panel">
-                                <div class="detail-header">
-                                    <div>
-                                        <h3>Template Editor</h3>
-                                    </div>
-                                </div>
-
-                                <div class="email-template-editor">
-                                    <div class="field">
-                                        <label>Template Name</label>
-                                        <input id="email-template-name" type="text" placeholder="Follow-up Invoice" />
-                                    </div>
-
-                                    <div class="field">
-                                        <label>Subject</label>
-                                        <input
-                                            id="email-template-subject"
-                                            type="text"
-                                            placeholder="Invoice from Billly for <name>"
-                                        />
-                                    </div>
-
-                                    <div class="field">
-                                        <label>Body</label>
-                                        <textarea
-                                            id="email-template-body"
-                                            placeholder="Hi <name>,&#10;&#10;attached you will find your invoice. If anything is unclear, you can reach me at <email>."
-                                        ></textarea>
-                                    </div>
-
-                                    <div class="detail-block email-placeholder-block">
-                                        <div class="detail-block-header">
-                                            <h4>Available Placeholders</h4>
+                        <div
+                            class="email-panel oj-tab-panel"
+                            data-email-panel="templates"
+                            id="email-panel-templates"
+                            role="tabpanel"
+                            aria-labelledby="email-tab-templates"
+                            hidden
+                        >
+                            <div class="emails-layout emails-template-layout">
+                                <div class="panel email-template-list-panel oj-panel">
+                                    <div class="detail-header">
+                                        <div>
+                                            <h3 class="oj-heading-3">Templates</h3>
                                         </div>
-                                        <div class="email-placeholder-list">
-                                            <span class="email-placeholder-chip">&lt;name&gt;</span>
-                                            <span class="email-placeholder-chip">&lt;email&gt;</span>
-                                            <span class="email-placeholder-chip">&lt;month&gt;</span>
-                                            <span class="email-placeholder-chip">&lt;year&gt;</span>
+                                        <button
+                                            class="ghost oj-button oj-button-ghost"
+                                            id="new-email-template"
+                                            type="button"
+                                        >
+                                            New Template
+                                        </button>
+                                    </div>
+
+                                    <div class="email-template-list" id="email-template-list"></div>
+                                </div>
+
+                                <div class="panel email-template-editor-panel oj-panel">
+                                    <div class="detail-header">
+                                        <div>
+                                            <h3 class="oj-heading-3">Template Editor</h3>
                                         </div>
                                     </div>
 
-                                    <div class="field-actions">
-                                        <button class="primary" id="save-email-template">Save Template</button>
-                                        <button class="ghost" id="delete-email-template">Delete Template</button>
+                                    <div class="email-template-editor">
+                                        <div class="field oj-field">
+                                            <label class="oj-label" for="email-template-name">Template Name</label>
+                                            <input
+                                                id="email-template-name"
+                                                type="text"
+                                                placeholder="Follow-up Invoice"
+                                                class="oj-input"
+                                            />
+                                        </div>
+
+                                        <div class="field oj-field">
+                                            <label class="oj-label" for="email-template-subject">Subject</label>
+                                            <input
+                                                id="email-template-subject"
+                                                type="text"
+                                                placeholder="Invoice from Billly for <name>"
+                                                class="oj-input"
+                                            />
+                                        </div>
+
+                                        <div class="field oj-field">
+                                            <label class="oj-label" for="email-template-body">Body</label>
+                                            <textarea
+                                                id="email-template-body"
+                                                placeholder="Hi <name>,&#10;&#10;attached you will find your invoice. If anything is unclear, you can reach me at <email>."
+                                                class="oj-textarea"
+                                            ></textarea>
+                                        </div>
+
+                                        <div class="detail-block email-placeholder-block oj-panel oj-panel-compact">
+                                            <div class="detail-block-header">
+                                                <h4 class="oj-heading-4">Available Placeholders</h4>
+                                            </div>
+                                            <div class="email-placeholder-list">
+                                                <span class="email-placeholder-chip oj-tag oj-mono">&lt;name&gt;</span>
+                                                <span class="email-placeholder-chip oj-tag oj-mono">&lt;email&gt;</span>
+                                                <span class="email-placeholder-chip oj-tag oj-mono">&lt;month&gt;</span>
+                                                <span class="email-placeholder-chip oj-tag oj-mono">&lt;year&gt;</span>
+                                            </div>
+                                        </div>
+
+                                        <div class="field-actions oj-cluster">
+                                            <button
+                                                class="primary oj-button oj-button-primary"
+                                                id="save-email-template"
+                                                type="button"
+                                            >
+                                                Save Template
+                                            </button>
+                                            <button
+                                                class="ghost oj-button oj-button-ghost"
+                                                id="delete-email-template"
+                                                type="button"
+                                            >
+                                                Delete Template
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
                         </div>
-                    </div>
 
-                    <div class="email-panel hidden" data-email-panel="signature">
-                        <div class="panel email-signature-panel">
-                            <div class="detail-header">
-                                <div>
-                                    <h3>Signature</h3>
+                        <div
+                            class="email-panel oj-tab-panel"
+                            data-email-panel="signature"
+                            id="email-panel-signature"
+                            role="tabpanel"
+                            aria-labelledby="email-tab-signature"
+                            hidden
+                        >
+                            <div class="panel email-signature-panel oj-panel">
+                                <div class="detail-header">
+                                    <div>
+                                        <h3 class="oj-heading-3">Signature</h3>
+                                    </div>
+                                    <button
+                                        class="primary oj-button oj-button-primary"
+                                        id="save-email-signature"
+                                        type="button"
+                                    >
+                                        Save Signature
+                                    </button>
                                 </div>
-                                <button class="primary" id="save-email-signature">Save Signature</button>
-                            </div>
 
-                            <div class="email-signature-editor">
-                                <div class="field">
-                                    <label>Default Signature</label>
-                                    <textarea id="email-signature" placeholder="Best regards,&#10;Billly"></textarea>
+                                <div class="email-signature-editor">
+                                    <div class="field oj-field">
+                                        <label class="oj-label" for="email-signature">Default Signature</label>
+                                        <textarea
+                                            id="email-signature"
+                                            placeholder="Best regards,&#10;Billly"
+                                            class="oj-textarea"
+                                        ></textarea>
+                                    </div>
                                 </div>
                             </div>
                         </div>
                     </div>
                 </section>
 
-                <section id="view-settings" class="view">
-                    <div class="settings-shell">
-                        <div class="panel settings-hero">
+                <section
+                    id="view-settings"
+                    class="view oj-tab-panel"
+                    role="tabpanel"
+                    aria-labelledby="tab-settings"
+                    hidden
+                >
+                    <div class="settings-shell" data-oj-tabs>
+                        <div class="panel settings-hero oj-panel">
                             <div class="settings-hero-copy">
-                                <p class="settings-kicker">Configuration</p>
-                                <h3>Settings</h3>
-                                <p class="settings-hero-text muted">
+                                <p class="settings-kicker oj-kicker">Configuration</p>
+                                <h3 class="oj-heading-3">Settings</h3>
+                                <p class="settings-hero-text muted oj-muted">
                                     Keep auths, folder paths and company data clearly separated so each area is easier
                                     to scan and manage.
                                 </p>
                             </div>
-                            <div class="settings-version-card">
-                                <span class="settings-version-label">Billly Build</span>
-                                <span class="settings-version-value" id="app-version-text">Version</span>
+                            <div class="settings-version-card oj-panel oj-panel-compact">
+                                <span class="settings-version-label oj-caption">Billly Build</span>
+                                <span class="settings-version-value oj-mono" id="app-version-text">Version</span>
                             </div>
                         </div>
 
                         <div class="settings-nav">
-                            <div class="settings-toggle" role="tablist" aria-label="Settings Sections">
+                            <div class="settings-toggle oj-tab-list" role="tablist" aria-label="Settings Sections">
                                 <button
-                                    class="settings-toggle-button active"
+                                    class="settings-toggle-button active oj-tab"
                                     type="button"
                                     data-settings-section="auths"
+                                    role="tab"
+                                    id="settings-tab-auths"
+                                    aria-controls="settings-panel-auths"
+                                    aria-selected="true"
                                 >
                                     Auths
                                 </button>
-                                <button class="settings-toggle-button" type="button" data-settings-section="folders">
+                                <button
+                                    class="settings-toggle-button oj-tab"
+                                    type="button"
+                                    data-settings-section="folders"
+                                    role="tab"
+                                    id="settings-tab-folders"
+                                    aria-controls="settings-panel-folders"
+                                    aria-selected="false"
+                                >
                                     Folders
                                 </button>
-                                <button class="settings-toggle-button" type="button" data-settings-section="data">
+                                <button
+                                    class="settings-toggle-button oj-tab"
+                                    type="button"
+                                    data-settings-section="data"
+                                    role="tab"
+                                    id="settings-tab-data"
+                                    aria-controls="settings-panel-data"
+                                    aria-selected="false"
+                                >
                                     Data
                                 </button>
                             </div>
-                            <button class="primary" id="save-settings">Save Settings</button>
+                            <button class="primary oj-button oj-button-primary" id="save-settings" type="button">
+                                Save Settings
+                            </button>
                         </div>
 
-                        <div class="panel settings-section" data-settings-panel="auths">
+                        <div
+                            class="panel settings-section oj-panel oj-tab-panel"
+                            data-settings-panel="auths"
+                            id="settings-panel-auths"
+                            role="tabpanel"
+                            aria-labelledby="settings-tab-auths"
+                        >
                             <div class="settings-section-header">
                                 <div>
-                                    <p class="settings-kicker">Access</p>
-                                    <h4>Auths</h4>
-                                    <p class="muted">
+                                    <p class="settings-kicker oj-kicker">Access</p>
+                                    <h4 class="oj-heading-4">Auths</h4>
+                                    <p class="muted oj-muted">
                                         Manage API access and the connected Google account in one place.
                                     </p>
                                 </div>
                             </div>
                             <div class="settings-section-grid">
                                 <div class="settings-stack">
-                                    <div class="settings-card">
+                                    <div class="settings-card oj-panel oj-panel-compact">
                                         <div class="settings-card-header">
                                             <div>
-                                                <h5>OpenAI</h5>
+                                                <h5 class="oj-heading-4">OpenAI</h5>
                                                 <p>Used for extraction, classification and payable tagging.</p>
                                             </div>
-                                            <div id="openai-key-saved" class="token-pill">Not configured</div>
+                                            <div id="openai-key-saved" class="token-pill oj-badge">Not configured</div>
                                         </div>
-                                        <div class="field">
-                                            <label>Secret Key</label>
-                                            <input id="openai-key" type="password" placeholder="sk-..." />
+                                        <div class="field oj-field">
+                                            <label class="oj-label" for="openai-key">Secret Key</label>
+                                            <input
+                                                id="openai-key"
+                                                type="password"
+                                                placeholder="sk-..."
+                                                class="oj-input oj-mono"
+                                            />
                                         </div>
-                                        <div class="field-actions">
-                                            <button class="ghost" id="test-openai">Test Key</button>
-                                            <button class="ghost hidden" id="remove-openai-key">Remove Key</button>
+                                        <div class="field-actions oj-cluster">
+                                            <button
+                                                class="ghost oj-button oj-button-ghost"
+                                                id="test-openai"
+                                                type="button"
+                                            >
+                                                Test Key
+                                            </button>
+                                            <button
+                                                class="ghost hidden oj-button oj-button-ghost"
+                                                id="remove-openai-key"
+                                                type="button"
+                                            >
+                                                Remove Key
+                                            </button>
                                         </div>
                                     </div>
                                 </div>
 
                                 <div class="settings-stack">
-                                    <div class="settings-card">
+                                    <div class="settings-card oj-panel oj-panel-compact">
                                         <div class="settings-card-header">
                                             <div>
-                                                <h5>Google Account</h5>
+                                                <h5 class="oj-heading-4">Google Account</h5>
                                                 <p>Connect the Google account Billly should use for Gmail features.</p>
                                             </div>
-                                            <div id="google-account-status" class="token-pill">Not connected</div>
+                                            <div id="google-account-status" class="token-pill oj-badge">
+                                                Not connected
+                                            </div>
                                         </div>
-                                        <div class="field-actions">
-                                            <button class="primary" id="connect-google">Connect Google</button>
-                                            <button class="ghost hidden" id="remove-google-account">
+                                        <div class="field-actions oj-cluster">
+                                            <button
+                                                class="primary oj-button oj-button-primary"
+                                                id="connect-google"
+                                                type="button"
+                                            >
+                                                Connect Google
+                                            </button>
+                                            <button
+                                                class="ghost hidden oj-button oj-button-ghost"
+                                                id="remove-google-account"
+                                                type="button"
+                                            >
                                                 Disconnect Google
                                             </button>
                                         </div>
                                     </div>
 
-                                    <div class="settings-card">
+                                    <div class="settings-card oj-panel oj-panel-compact">
                                         <div class="settings-card-header">
                                             <div>
-                                                <h5>Gmail Access</h5>
+                                                <h5 class="oj-heading-4">Gmail Access</h5>
                                                 <p>
                                                     Billly now requests Gmail send access so it can send emails and
                                                     attachments from the connected account.
                                                 </p>
                                             </div>
-                                            <div id="gmail-scope-status" class="token-pill">Not granted</div>
+                                            <div id="gmail-scope-status" class="token-pill oj-badge">Not granted</div>
                                         </div>
-                                        <div class="field-actions">
-                                            <button class="ghost" id="test-gmail">Test Gmail</button>
+                                        <div class="field-actions oj-cluster">
+                                            <button
+                                                class="ghost oj-button oj-button-ghost"
+                                                id="test-gmail"
+                                                type="button"
+                                            >
+                                                Test Gmail
+                                            </button>
                                         </div>
                                     </div>
                                 </div>
                             </div>
                         </div>
 
-                        <div class="panel settings-section hidden" data-settings-panel="folders">
+                        <div
+                            class="panel settings-section oj-panel oj-tab-panel"
+                            data-settings-panel="folders"
+                            id="settings-panel-folders"
+                            role="tabpanel"
+                            aria-labelledby="settings-tab-folders"
+                            hidden
+                        >
                             <div class="settings-section-header">
                                 <div>
-                                    <p class="settings-kicker">Workspace</p>
-                                    <h4>Folders</h4>
-                                    <p class="muted">Choose where Billly watches revenue invoices and payables.</p>
+                                    <p class="settings-kicker oj-kicker">Workspace</p>
+                                    <h4 class="oj-heading-4">Folders</h4>
+                                    <p class="muted oj-muted">
+                                        Choose where Billly watches revenue invoices and payables.
+                                    </p>
                                 </div>
                             </div>
                             <div class="settings-card-grid">
-                                <div class="settings-card">
+                                <div class="settings-card oj-panel oj-panel-compact">
                                     <div class="settings-card-header">
                                         <div>
-                                            <h5>Revenue Folder</h5>
+                                            <h5 class="oj-heading-4">Revenue Folder</h5>
                                             <p>Customer invoices and outgoing revenue PDFs.</p>
                                         </div>
                                     </div>
-                                    <div class="field">
-                                        <label>Folder Path</label>
-                                        <input id="revenue-folder" type="text" placeholder="/path/to/revenue" />
-                                        <div class="field-actions">
-                                            <button class="ghost" id="pick-revenue-folder">Select Folder</button>
+                                    <div class="field oj-field">
+                                        <label class="oj-label" for="revenue-folder">Folder Path</label>
+                                        <input
+                                            id="revenue-folder"
+                                            type="text"
+                                            placeholder="/path/to/revenue"
+                                            class="oj-input oj-mono"
+                                        />
+                                        <div class="field-actions oj-cluster">
+                                            <button
+                                                class="ghost oj-button oj-button-ghost"
+                                                id="pick-revenue-folder"
+                                                type="button"
+                                            >
+                                                Select Folder
+                                            </button>
                                         </div>
                                     </div>
                                 </div>
 
-                                <div class="settings-card">
+                                <div class="settings-card oj-panel oj-panel-compact">
                                     <div class="settings-card-header">
                                         <div>
-                                            <h5>Payables Folder</h5>
+                                            <h5 class="oj-heading-4">Payables Folder</h5>
                                             <p>Incoming bills, subscriptions and supplier PDFs.</p>
                                         </div>
                                     </div>
-                                    <div class="field">
-                                        <label>Folder Path</label>
-                                        <input id="payable-folder" type="text" placeholder="/path/to/payables" />
-                                        <div class="field-actions">
-                                            <button class="ghost" id="pick-payable-folder">Select Folder</button>
+                                    <div class="field oj-field">
+                                        <label class="oj-label" for="payable-folder">Folder Path</label>
+                                        <input
+                                            id="payable-folder"
+                                            type="text"
+                                            placeholder="/path/to/payables"
+                                            class="oj-input oj-mono"
+                                        />
+                                        <div class="field-actions oj-cluster">
+                                            <button
+                                                class="ghost oj-button oj-button-ghost"
+                                                id="pick-payable-folder"
+                                                type="button"
+                                            >
+                                                Select Folder
+                                            </button>
                                         </div>
                                     </div>
                                 </div>
                             </div>
                         </div>
 
-                        <div class="panel settings-section hidden" data-settings-panel="data">
+                        <div
+                            class="panel settings-section oj-panel oj-tab-panel"
+                            data-settings-panel="data"
+                            id="settings-panel-data"
+                            role="tabpanel"
+                            aria-labelledby="settings-tab-data"
+                            hidden
+                        >
                             <div class="settings-section-header">
                                 <div>
-                                    <p class="settings-kicker">Profile</p>
-                                    <h4>Data</h4>
-                                    <p class="muted">
+                                    <p class="settings-kicker oj-kicker">Profile</p>
+                                    <h4 class="oj-heading-4">Data</h4>
+                                    <p class="muted oj-muted">
                                         Store the sender address and sender email Billly should use for your company
                                         profile.
                                     </p>
                                 </div>
                             </div>
-                            <div class="settings-card">
+                            <div class="settings-card oj-panel oj-panel-compact">
                                 <div class="settings-card-header">
                                     <div>
-                                        <h5>Company Details</h5>
+                                        <h5 class="oj-heading-4">Company Details</h5>
                                         <p>
                                             Your email is auto-filled from the connected Gmail account and can still be
                                             adjusted manually.
@@ -630,20 +1012,31 @@ Select a recipient to preview the final email.</pre
                                     </div>
                                 </div>
                                 <div class="settings-profile-grid">
-                                    <div class="field">
-                                        <label>Company Name</label>
-                                        <input id="company-name" type="text" placeholder="Billly GmbH" />
+                                    <div class="field oj-field">
+                                        <label class="oj-label" for="company-name">Company Name</label>
+                                        <input
+                                            id="company-name"
+                                            type="text"
+                                            placeholder="Billly GmbH"
+                                            class="oj-input"
+                                        />
                                     </div>
-                                    <div class="field">
-                                        <label>Your Email</label>
-                                        <input id="company-email" type="email" placeholder="name@company.com" />
+                                    <div class="field oj-field">
+                                        <label class="oj-label" for="company-email">Your Email</label>
+                                        <input
+                                            id="company-email"
+                                            type="email"
+                                            placeholder="name@company.com"
+                                            class="oj-input"
+                                        />
                                     </div>
-                                    <div class="field">
-                                        <label>Your Address</label>
+                                    <div class="field oj-field">
+                                        <label class="oj-label" for="company-address">Your Address</label>
                                         <input
                                             id="company-address"
                                             type="text"
                                             placeholder="Street 1&#10;ZIP City&#10;Country"
+                                            class="oj-input"
                                         />
                                     </div>
                                 </div>

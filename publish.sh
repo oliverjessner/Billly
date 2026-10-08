@@ -21,7 +21,7 @@ rm -rf "$BUNDLE_DIR"
 mkdir -p "$BUNDLE_DIR"
 
 echo "Building the app..."
-npm run tauri build -- --bundles app
+npm run tauri:cli -- build --bundles app
 
 if [ ! -d "$APP" ]; then
     echo "App not found at $APP"
